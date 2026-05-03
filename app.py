@@ -137,7 +137,9 @@ def get_prices():
             app_entry = raw.get(str(appid), {})
             price = None
             if app_entry.get("success"):
-                price = app_entry.get("data", {}).get("price_overview")
+                data_field = app_entry.get("data", {})
+                if isinstance(data_field, dict):
+                    price = data_field.get("price_overview")
             result[appid] = price
             _store_price(appid, price)
 
