@@ -1,5 +1,6 @@
 import time
 import os
+import re
 import json
 from threading import Lock
 from flask import Flask, render_template, jsonify, request
@@ -223,6 +224,17 @@ def get_prices():
     return jsonify(result)
 
 
+@app.route("/api/hltb/clear", methods=["POST"])
+def clear_hltb_cache():
+    with _hltb_lock:
+        _hltb_cache.clear()
+    try:
+        os.remove(HLTB_FILE)
+    except FileNotFoundError:
+        pass
+    return jsonify({"ok": True})
+
+
 @app.route("/api/hltb", methods=["POST"])
 def get_hltb():
     try:
@@ -253,11 +265,20 @@ def get_hltb():
         data = None
 
         if hltb_available and title:
+            # Strip symbols Steam puts in names that hurt similarity (™ ® © etc.)
+            clean = re.sub(r'[^\w\s\-\'\:\.\,\!\?]', ' ', title)
+            clean = re.sub(r'\s+', ' ', clean).strip()
             try:
-                results = HowLongToBeat().search(title, similarity_case_sensitive=False)
-                if results:
+                results = HowLongToBeat().search(clean, similarity_case_sensitive=False)
+                if results is None:
+                    app.logger.debug("HLTB: no response for %r", clean)
+                elif not results:
+                    app.logger.debug("HLTB: empty results for %r", clean)
+                else:
                     best = max(results, key=lambda g: g.similarity)
-                    if best.similarity >= 0.6:
+                    app.logger.info("HLTB: %r → %r (sim=%.2f, main=%s)",
+                                    clean, best.game_name, best.similarity, best.main_story)
+                    if best.similarity >= 0.4:
                         def pos(v):
                             return round(v, 1) if (v and v > 0) else None
                         data = {
@@ -266,7 +287,8 @@ def get_hltb():
                             "complete": pos(best.completionist),
                             "matched":  best.game_name,
                         }
-            except Exception:
+            except Exception as exc:
+                app.logger.warning("HLTB error for %r: %s", clean, exc)
                 data = None
 
         result[appid] = data
@@ -334,4 +356,6 @@ def get_reviews():
 
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO)
     app.run(debug=True, port=5000)
