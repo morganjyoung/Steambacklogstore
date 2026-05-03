@@ -16,6 +16,7 @@ const state = {
   prices:   {},   // appid -> price_overview | null | 'loading'
   reviews:  {},   // appid -> {score, desc, pct, total} | null | 'loading'
   hltb:     {},   // appid -> {main, extra, complete, matched} | null | 'loading'
+  details:  {},   // appid -> { genres:[], release_date:'' } | null | 'loading'
   page: 1,
   apiKey: '',
   steamId: '',
@@ -38,7 +39,41 @@ const gameGrid       = document.getElementById('gameGrid');
 const pagination     = document.getElementById('pagination');
 const filterSelect   = document.getElementById('filterSelect');
 const sortSelect     = document.getElementById('sortSelect');
+const sortDirSelect  = document.getElementById('sortDirSelect');
+const viewModeSelect = document.getElementById('viewModeSelect');
+const searchInput    = document.getElementById('searchInput');
+const showIgnoredCheckbox = document.getElementById('showIgnoredCheckbox');
+const cphCheckbox    = document.getElementById('cphCheckbox');
+const genreFilterSelect = document.getElementById('genreFilterSelect');
+const recGenreSelect = document.getElementById('recGenre');
 const backBtn        = document.getElementById('backBtn');
+const surpriseMeBtn  = document.getElementById('surpriseMeBtn');
+const recommendBtn   = document.getElementById('recommendBtn');
+const recommendModal = document.getElementById('recommendModal');
+const closeRecommendBtn = document.getElementById('closeRecommendBtn');
+const recommendGrid  = document.getElementById('recommendGrid');
+
+const gameDetailsModal = document.getElementById('gameDetailsModal');
+const closeGameDetailsBtn = document.getElementById('closeGameDetailsBtn');
+const gameDetailsImg = document.getElementById('gameDetailsImg');
+const gameDetailsTitle = document.getElementById('gameDetailsTitle');
+const gameDetailsDesc = document.getElementById('gameDetailsDesc');
+const gameDetailsRelease = document.getElementById('gameDetailsRelease');
+const gameDetailsDev = document.getElementById('gameDetailsDev');
+const gameDetailsGenres = document.getElementById('gameDetailsGenres');
+const gameDetailsPlaytime = document.getElementById('gameDetailsPlaytime');
+const gameDetailsAddHoursBtn = document.getElementById('gameDetailsAddHoursBtn');
+const gameDetailsPrice = document.getElementById('gameDetailsPrice');
+const gameDetailsMetacritic = document.getElementById('gameDetailsMetacritic');
+const gameDetailsReview = document.getElementById('gameDetailsReview');
+const gameDetailsHltb = document.getElementById('gameDetailsHltb');
+const gameDetailsFeatures = document.getElementById('gameDetailsFeatures');
+const gameDetailsTags = document.getElementById('gameDetailsTags');
+const gameDetailsClientLink = document.getElementById('gameDetailsClientLink');
+const gameDetailsStoreLink = document.getElementById('gameDetailsStoreLink');
+const gameDetailsCompleteBtn = document.getElementById('gameDetailsCompleteBtn');
+const gameDetailsPlayingBtn = document.getElementById('gameDetailsPlayingBtn');
+const gameDetailsIgnoreBtn = document.getElementById('gameDetailsIgnoreBtn');
 
 const elTotalValue    = document.getElementById('totalValue');
 const elUnplayedValue = document.getElementById('unplayedValue');
@@ -46,6 +81,7 @@ const elUncompletedValue = document.getElementById('uncompletedValue');
 const elStatGames     = document.getElementById('statGames');
 const elStatUnplayed  = document.getElementById('statUnplayed');
 const elStatUncompleted = document.getElementById('statUncompleted');
+const elUncompletedTime = document.getElementById('uncompletedTime');
 const elStatPriced    = document.getElementById('statPriced');
 const elResultsCount  = document.getElementById('resultsCount');
 
@@ -106,42 +142,201 @@ function saveCompleted() {
   try { localStorage.setItem(LS_COMPLETED_KEY, JSON.stringify([...completed])); } catch (_) {}
 }
 
-function toggleCompleted(appid) {
-  const wasCompleted = completed.has(appid);
-  if (wasCompleted) completed.delete(appid); else completed.add(appid);
-  saveCompleted();
-  const card = gameGrid.querySelector(`.game-card[data-appid="${appid}"]`);
-  if (card) applyCompletedVisual(card, appid);
-  // No re-filter — the card updates visually in place; user can change filter manually
+const LS_EXTRA_HOURS_KEY = 'sbs_extra_hours';
+const extraHours = (() => {
+  try { return JSON.parse(localStorage.getItem(LS_EXTRA_HOURS_KEY) || '{}'); }
+  catch (_) { return {}; }
+})();
+function saveExtraHours() {
+  try { localStorage.setItem(LS_EXTRA_HOURS_KEY, JSON.stringify(extraHours)); } catch (_) {}
+}
+function getPlaytime(game) {
+  if (!game) return 0;
+  const extra = extraHours[game.appid] || 0;
+  return (game.playtime_forever || 0) + extra * 60;
+}
 
-  if (state.allGames.length) {
-    const uncompletedCount = state.allGames.filter(g => !completed.has(String(g.appid))).length;
-    if (elStatUncompleted) elStatUncompleted.textContent = uncompletedCount.toLocaleString();
+const LS_PLAYING_KEY = 'sbs_playing';
+const playing = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem(LS_PLAYING_KEY) || '[]')); }
+  catch (_) { return new Set(); }
+})();
+function savePlaying() {
+  try { localStorage.setItem(LS_PLAYING_KEY, JSON.stringify([...playing])); } catch (_) {}
+}
 
-    const priceData = state.prices[appid];
-    if (priceData && priceData !== 'loading' && priceData.final != null) {
-      const prev = state.uncompletedCents;
-      // If we are un-completing it, add the value. If we are completing it, subtract the value.
-      state.uncompletedCents += wasCompleted ? priceData.final : -priceData.final;
-      if (elUncompletedValue) animateValue(elUncompletedValue, prev, state.uncompletedCents);
+const LS_IGNORED_KEY = 'sbs_ignored';
+
+const ignored = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem(LS_IGNORED_KEY) || '[]')); }
+  catch (_) { return new Set(); }
+})();
+
+function saveIgnored() {
+  try { localStorage.setItem(LS_IGNORED_KEY, JSON.stringify([...ignored])); } catch (_) {}
+}
+
+function updateTotals() {
+  let gamesCount = 0;
+  let unplayedCount = 0;
+  let uncompletedCount = 0;
+  let pricedCount = 0;
+  
+  let newTotal = 0;
+  let newUnplayed = 0;
+  let newUncompleted = 0;
+
+  state.allGames.forEach(g => {
+    const id = String(g.appid);
+    if (ignored.has(id)) return;
+    
+    gamesCount++;
+    const isUnplayed = getPlaytime(g) <= 0;
+    const isUncompleted = !completed.has(id);
+    
+    if (isUnplayed) unplayedCount++;
+    if (isUncompleted) uncompletedCount++;
+    
+    const p = state.prices[id];
+    if (p && p !== 'loading' && p.final != null) {
+      pricedCount++;
+      newTotal += p.final;
+      if (isUnplayed) newUnplayed += p.final;
+      if (isUncompleted) newUncompleted += p.final;
     }
+  });
+
+  elStatGames.textContent = gamesCount.toLocaleString();
+  elStatUnplayed.textContent = unplayedCount.toLocaleString();
+  if (elStatUncompleted) elStatUncompleted.textContent = uncompletedCount.toLocaleString();
+  elStatPriced.textContent = `${pricedCount} / ${gamesCount}`;
+
+  if (state.totalCents !== newTotal) {
+    animateValue(elTotalValue, state.totalCents, newTotal);
+    state.totalCents = newTotal;
+  }
+  if (state.unplayedCents !== newUnplayed) {
+    animateValue(elUnplayedValue, state.unplayedCents, newUnplayed);
+    state.unplayedCents = newUnplayed;
+  }
+  if (state.uncompletedCents !== newUncompleted) {
+    if (elUncompletedValue) animateValue(elUncompletedValue, state.uncompletedCents, newUncompleted);
+    state.uncompletedCents = newUncompleted;
+  }
+  state.pricedCount = pricedCount;
+  
+  updateUncompletedHoursDisplay();
+}
+
+function updateCardVisuals(card, appid) {
+  const done = completed.has(appid);
+  const ign = ignored.has(appid);
+  const play = playing.has(appid);
+  
+  card.classList.toggle('is-complete', done);
+  card.classList.toggle('is-ignored', ign);
+  card.classList.toggle('is-playing', play);
+  
+  let doneOverlay = card.querySelector('.badge-completed-overlay');
+  if (done && !ign) {
+    if (!doneOverlay) {
+      doneOverlay = document.createElement('div');
+      doneOverlay.className = 'badge-completed-overlay';
+      const imgWrap = card.querySelector('.card-image-wrap, .table-image-wrap');
+      if (imgWrap) imgWrap.appendChild(doneOverlay);
+    }
+    doneOverlay.textContent = '✓ Completed';
+  } else if (doneOverlay) {
+    doneOverlay.remove();
+  }
+  
+  let playOverlay = card.querySelector('.badge-playing-overlay');
+  if (play && !done && !ign) {
+    if (!playOverlay) {
+      playOverlay = document.createElement('div');
+      playOverlay.className = 'badge-playing-overlay';
+      const imgWrap = card.querySelector('.card-image-wrap, .table-image-wrap');
+      if (imgWrap) imgWrap.appendChild(playOverlay);
+    }
+    playOverlay.textContent = '▶ Playing';
+  } else if (playOverlay) {
+    playOverlay.remove();
+  }
+
+  const btns = card.querySelectorAll('.complete-btn');
+  if (btns.length === 3) {
+    btns[0].classList.toggle('is-complete', done);
+    btns[0].textContent = done ? '✓ Completed' : 'Completed';
+    
+    btns[1].classList.toggle('is-playing-btn', play);
+    btns[1].textContent = play ? '▶ Playing' : 'Playing';
+    
+    btns[2].classList.toggle('is-ignored-btn', ign);
+    btns[2].textContent = ign ? '🚫 Ignored' : 'Ignore';
   }
 }
 
-function applyCompletedVisual(card, appid) {
-  const done = completed.has(appid);
-  card.classList.toggle('is-complete', done);
-  let overlay = card.querySelector('.badge-completed-overlay');
-  if (done && !overlay) {
-    overlay = document.createElement('div');
-    overlay.className = 'badge-completed-overlay';
-    overlay.textContent = '✓ Completed';
-    card.querySelector('.card-image-wrap').appendChild(overlay);
-  } else if (!done && overlay) {
-    overlay.remove();
+function toggleCompleted(appid) {
+  const wasCompleted = completed.has(appid);
+  if (wasCompleted) {
+    completed.delete(appid);
+  } else {
+    completed.add(appid);
+    playing.delete(appid);
+    savePlaying();
   }
-  const btn = card.querySelector('.complete-btn');
-  if (btn) { btn.classList.toggle('is-complete', done); btn.textContent = done ? '✓ Completed' : 'Mark as Completed'; }
+  saveCompleted();
+  
+  const cards = document.querySelectorAll(`.game-card[data-appid="${appid}"], .game-row[data-appid="${appid}"]`);
+  cards.forEach(card => updateCardVisuals(card, appid));
+  
+  updateTotals();
+  applyFilterSort(true);
+
+  // Confetti celebration if marking as completed!
+  if (!wasCompleted && typeof confetti === 'function') {
+    confetti({
+      particleCount: 120,
+      spread: 80,
+      origin: { y: 0.6 },
+      colors: ['#a4d007', '#66c0f4', '#ffffff'],
+      zIndex: 2000
+    });
+  }
+}
+
+function togglePlaying(appid) {
+  const wasPlaying = playing.has(appid);
+  if (wasPlaying) {
+    playing.delete(appid);
+  } else {
+    playing.add(appid);
+    completed.delete(appid);
+    saveCompleted();
+  }
+  savePlaying();
+  
+  const cards = document.querySelectorAll(`.game-card[data-appid="${appid}"], .game-row[data-appid="${appid}"]`);
+  cards.forEach(card => updateCardVisuals(card, appid));
+  
+  updateTotals();
+  applyFilterSort(true);
+}
+
+function toggleIgnored(appid) {
+  const wasIgnored = ignored.has(appid);
+  if (wasIgnored) ignored.delete(appid); else ignored.add(appid);
+  saveIgnored();
+  
+  updateTotals();
+  
+  const showIgnored = showIgnoredCheckbox?.checked;
+  if (showIgnored) {
+    const cards = document.querySelectorAll(`.game-card[data-appid="${appid}"], .game-row[data-appid="${appid}"]`);
+    cards.forEach(card => updateCardVisuals(card, appid));
+  } else {
+    applyFilterSort(true);
+  }
 }
 
 // ── Animated counter ──────────────────────────────
@@ -164,8 +359,9 @@ function animateValue(el, fromCents, toCents) {
 }
 
 // ── Price render helpers ──────────────────────────
-function renderPriceEl(el, priceData, unplayed) {
+function renderPriceEl(el, priceData, game) {
   el.innerHTML = '';
+  const unplayed = !game || getPlaytime(game) <= 0;
   if (priceData === 'loading' || priceData === undefined) {
     const s = document.createElement('span');
     s.className = 'price-loading';
@@ -182,6 +378,37 @@ function renderPriceEl(el, priceData, unplayed) {
   }
   const fmt = formatPrice(priceData);
   if (!fmt) return;
+  
+  if (cphCheckbox && cphCheckbox.checked && game && fmt.finalCents > 0) {
+    const hltb = state.hltb[game.appid];
+    const hltbHours = (hltb && hltb !== 'loading' && hltb.main > 0) ? hltb.main : null;
+    const playedHours = getPlaytime(game) / 60;
+    
+    const curCph = playedHours > 0 ? formatCents(fmt.finalCents / playedHours) + '/hr' : 'Unplayed';
+    
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.alignItems = 'flex-start';
+    wrap.style.lineHeight = '1.2';
+    
+    const curSpan = document.createElement('span');
+    curSpan.className = 'price-final';
+    curSpan.textContent = curCph;
+    wrap.appendChild(curSpan);
+    
+    if (hltbHours) {
+      const potSpan = document.createElement('span');
+      potSpan.style.fontSize = '11px';
+      potSpan.style.color = 'var(--text-secondary)';
+      potSpan.textContent = `Pot: ${formatCents(fmt.finalCents / hltbHours)}/hr`;
+      wrap.appendChild(potSpan);
+    }
+    
+    el.appendChild(wrap);
+    return;
+  }
+
   if (fmt.disc > 0) {
     const orig = document.createElement('span');
     orig.className = 'price-original';
@@ -195,20 +422,25 @@ function renderPriceEl(el, priceData, unplayed) {
 }
 
 function updateCardPrice(appid, priceObj) {
-  const priceEl = gameGrid.querySelector(`.card-price[data-appid="${appid}"]`);
-  if (!priceEl) return;
-  const game = state.allGames.find(g => String(g.appid) === appid);
-  renderPriceEl(priceEl, priceObj, game ? !game.playtime_forever : false);
-  if (priceObj && priceObj.discount_percent > 0) {
-    const card = priceEl.closest('.game-card');
-    if (card && !card.querySelector('.badge-top-right')) {
-      const wrap = document.createElement('span'); wrap.className = 'badge-top-right';
-      const badge = document.createElement('span'); badge.className = 'badge-discount';
-      badge.textContent = `-${priceObj.discount_percent}%`;
-      wrap.appendChild(badge);
-      card.querySelector('.card-image-wrap').appendChild(wrap);
+  const els = document.querySelectorAll(`.card-price[data-appid="${appid}"]`);
+  els.forEach(priceEl => {
+    const game = state.allGames.find(g => String(g.appid) === appid);
+    renderPriceEl(priceEl, priceObj, game);
+    if (priceObj && priceObj.discount_percent > 0 && !(cphCheckbox && cphCheckbox.checked)) {
+        const imgWrap = priceEl.closest('.game-card, .game-row')?.querySelector('.card-image-wrap, .table-image-wrap');
+        if (imgWrap && !imgWrap.querySelector('.badge-top-right')) {
+        const wrap = document.createElement('span'); wrap.className = 'badge-top-right';
+        const badge = document.createElement('span'); badge.className = 'badge-discount';
+        badge.textContent = `-${priceObj.discount_percent}%`;
+          if (imgWrap.classList.contains('table-image-wrap')) {
+            wrap.style.top = '4px'; wrap.style.right = '4px';
+            badge.style.fontSize = '10px'; badge.style.padding = '2px 4px';
+          }
+        wrap.appendChild(badge);
+          imgWrap.appendChild(wrap);
+      }
     }
-  }
+  });
 }
 
 // ── Core price fetcher (shared by page-load and background) ──
@@ -221,35 +453,14 @@ async function fetchAndApplyPrices(appids) {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
 
-    let totalDelta = 0, unplayedDelta = 0, uncompletedDelta = 0;
+    let priceUpdated = false;
     Object.entries(data).forEach(([appid, priceObj]) => {
       state.prices[appid] = priceObj;
-      if (priceObj && priceObj.final != null) {
-        state.pricedCount++;
-        totalDelta += priceObj.final;
-        const game = state.allGames.find(g => String(g.appid) === appid);
-        if (game && !game.playtime_forever) unplayedDelta += priceObj.final;
-        if (game && !completed.has(String(game.appid))) uncompletedDelta += priceObj.final;
-      }
       updateCardPrice(appid, priceObj);
+      priceUpdated = true;
     });
 
-    if (totalDelta > 0) {
-      const prev = state.totalCents;
-      state.totalCents += totalDelta;
-      animateValue(elTotalValue, prev, state.totalCents);
-    }
-    if (unplayedDelta > 0) {
-      const prev = state.unplayedCents;
-      state.unplayedCents += unplayedDelta;
-      animateValue(elUnplayedValue, prev, state.unplayedCents);
-    }
-    if (uncompletedDelta > 0) {
-      const prev = state.uncompletedCents;
-      state.uncompletedCents += uncompletedDelta;
-      if (elUncompletedValue) animateValue(elUncompletedValue, prev, state.uncompletedCents);
-    }
-    elStatPriced.textContent = `${state.pricedCount} / ${state.allGames.length}`;
+    if (priceUpdated) updateTotals();
 
   } catch (err) {
     // Reset to undefined so background loader can retry
@@ -260,7 +471,8 @@ async function fetchAndApplyPrices(appids) {
 
 // High-priority: current visible page
 async function loadPricesForPage(games) {
-  const toFetch = games.map(g => String(g.appid)).filter(id => state.prices[id] === undefined);
+  // Cap the immediate page fetch to 50 so we don't break URL limits in "Show All" table view
+  const toFetch = games.map(g => String(g.appid)).filter(id => state.prices[id] === undefined).slice(0, 50);
   if (!toFetch.length) return;
   try { await fetchAndApplyPrices(toFetch); }
   catch (e) { console.error('Page price fetch error:', e); }
@@ -305,8 +517,8 @@ function renderReviewEl(el, reviewData) {
 }
 
 function updateCardReview(appid, reviewData) {
-  const el = gameGrid.querySelector(`.card-review[data-appid="${appid}"]`);
-  if (el) renderReviewEl(el, reviewData);
+  const els = document.querySelectorAll(`.card-review[data-appid="${appid}"]`);
+  els.forEach(el => renderReviewEl(el, reviewData));
 }
 
 // Background: load reviews for all games in batches
@@ -361,12 +573,27 @@ function renderHltbEl(el, hltbData) {
 }
 
 function updateCardHltb(appid, hltbData) {
-  const el = gameGrid.querySelector(`.card-hltb[data-appid="${appid}"]`);
-  if (el) renderHltbEl(el, hltbData);
+  const els = document.querySelectorAll(`.card-hltb[data-appid="${appid}"]`);
+  els.forEach(el => renderHltbEl(el, hltbData));
+}
+
+function updateUncompletedHoursDisplay() {
+  if (!elUncompletedTime) return;
+  let total = 0;
+  state.allGames.forEach(g => {
+    const id = String(g.appid);
+    if (!completed.has(id) && !ignored.has(id)) {
+      const hData = state.hltb[id];
+      if (hData && hData !== 'loading' && hData.main) {
+        total += hData.main;
+      }
+    }
+  });
+  elUncompletedTime.textContent = total > 0 ? (Math.round(total).toLocaleString() + 'h') : '0h';
 }
 
 async function backgroundLoadHltb() {
-  const BATCH = 5;
+  const BATCH = 50;
   const all = state.allGames;
   for (let i = 0; i < all.length; i += BATCH) {
     if (storeSection.style.display === 'none') break;
@@ -386,18 +613,256 @@ async function backgroundLoadHltb() {
         state.hltb[appid] = hltbData;
         updateCardHltb(appid, hltbData);
       });
+      updateUncompletedHoursDisplay();
     } catch (_) {
       batch.forEach(g => { const id = String(g.appid); if (state.hltb[id] === 'loading') delete state.hltb[id]; });
     }
-    await delay(1200);  // HLTB is a scraper — be gentle
+    await delay(100);  // Now querying local CSV
   }
+}
+
+// ── Genre Background Loader & UI ───────────────────
+let knownGenres = new Set();
+try {
+  const savedGenres = JSON.parse(localStorage.getItem('sbs_known_genres') || '[]');
+  knownGenres = new Set(savedGenres);
+} catch(_) {}
+
+function renderGenreDropdowns() {
+  const sorted = [...knownGenres].sort();
+  try { localStorage.setItem('sbs_known_genres', JSON.stringify(sorted)); } catch(_) {}
+  
+  const buildOpts = (selectEl, defaultLabel) => {
+    if (!selectEl) return;
+    const currentVal = selectEl.dataset.savedValue || selectEl.value;
+    selectEl.innerHTML = `<option value="any">${defaultLabel}</option>`;
+    sorted.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g;
+      opt.textContent = g;
+      selectEl.appendChild(opt);
+    });
+    if (sorted.includes(currentVal)) selectEl.value = currentVal;
+    delete selectEl.dataset.savedValue; // clear after first use
+  };
+  
+  buildOpts(genreFilterSelect, 'All Tags');
+  buildOpts(recGenreSelect, 'Any Tag');
+}
+
+async function backgroundLoadDetails() {
+  const BATCH = 4;
+  const allIds = state.allGames.map(g => String(g.appid));
+  for (let i = 0; i < allIds.length; i += BATCH) {
+    if (storeSection.style.display === 'none') break;
+    const batch = allIds.slice(i, i + BATCH).filter(id => state.details[id] === undefined);
+    if (!batch.length) continue;
+    
+    batch.forEach(id => { state.details[id] = 'loading'; });
+    try {
+      const params = new URLSearchParams({ appids: batch.join(','), cc: state.currency });
+      const resp = await fetch(`/api/genres?${params}`); // Route is still /api/genres
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      let changed = false;
+      batch.forEach(id => {
+        if (data[id] !== undefined) {
+          state.details[id] = data[id];
+          const genres = data[id]?.genres || [];
+          if (genres.length) genres.forEach(g => { if (!knownGenres.has(g)) { knownGenres.add(g); changed = true; } });
+          const tags = data[id]?.tags || [];
+          if (tags.length) tags.forEach(t => { if (!knownGenres.has(t)) { knownGenres.add(t); changed = true; } });
+        } else {
+          state.details[id] = null; // Mark as failed so we don't hang the progress bar
+        }
+      });
+      if (changed) renderGenreDropdowns();
+      if (genreFilterSelect?.value !== 'any' || sortSelect?.value === 'release') applyFilterSort(true);
+      else updateResultsCount();
+    } catch (_) { batch.forEach(id => { if (state.details[id] === 'loading') state.details[id] = null; }); }
+    await delay(300);
+  }
+}
+
+function updateCardPlaytimeBadge(appid) {
+  const game = state.allGames.find(g => String(g.appid) === appid);
+  if (!game) return;
+  const cards = document.querySelectorAll(`.game-card[data-appid="${appid}"], .game-row[data-appid="${appid}"]`);
+  cards.forEach(card => {
+    const unplayed = getPlaytime(game) <= 0;
+    const badge = card.querySelector('.card-badge');
+    if (badge) {
+      badge.className = 'card-badge ' + (unplayed ? 'badge-unplayed' : 'badge-hours');
+      badge.textContent = unplayed ? 'Unplayed' : hoursLabel(getPlaytime(game)) + ' played';
+    }
+  });
+}
+
+// ── Game Details Modal ────────────────────────────
+function showGameDetails(appid) {
+  const game = state.allGames.find(g => String(g.appid) === appid);
+  if (!game) return;
+
+  gameDetailsTitle.textContent = game.name || `App ${appid}`;
+  gameDetailsImg.src = imageUrl(appid);
+  gameDetailsClientLink.href = `steam://run/${appid}`;
+  gameDetailsStoreLink.href = `https://store.steampowered.com/app/${appid}`;
+
+  const isPlayed = getPlaytime(game) > 0;
+  gameDetailsPlaytime.textContent = isPlayed ? hoursLabel(getPlaytime(game)) + ' played' : 'Unplayed';
+  gameDetailsPlaytime.style.color = isPlayed ? 'var(--text-primary)' : '#ff6b6b';
+
+  if (gameDetailsAddHoursBtn) {
+    gameDetailsAddHoursBtn.onclick = () => {
+      const currentExtra = extraHours[appid] || 0;
+      const input = prompt(`Enter additional hours played elsewhere for ${game.name}:\n(Steam logged: ${hoursLabel(game.playtime_forever) || '0h'})\n\nSet to 0 to remove.`, currentExtra);
+      if (input !== null) {
+        const parsed = parseFloat(input);
+        if (!isNaN(parsed)) {
+          if (parsed <= 0) {
+            delete extraHours[appid];
+          } else {
+            extraHours[appid] = parsed;
+          }
+          saveExtraHours();
+          showGameDetails(appid);
+          updateCardPlaytimeBadge(appid);
+          updateCardPrice(appid, state.prices[appid]);
+          updateTotals();
+        }
+      }
+    };
+  }
+
+  const isCph = cphCheckbox && cphCheckbox.checked;
+  const priceData = state.prices[appid];
+  if (priceData && priceData !== 'loading') {
+    const fmt = formatPrice(priceData);
+    if (fmt) {
+      if (isCph && fmt.finalCents > 0) {
+        const playedHours = getPlaytime(game) / 60;
+        const hltb = state.hltb[appid];
+        const hltbHours = (hltb && hltb !== 'loading' && hltb.main > 0) ? hltb.main : null;
+        
+        let cphStr = playedHours > 0 ? formatCents(fmt.finalCents / playedHours) + '/hr' : 'Unplayed';
+        if (hltbHours) cphStr += ` (Pot: ${formatCents(fmt.finalCents / hltbHours)}/hr)`;
+        
+        gameDetailsPrice.textContent = cphStr;
+      } else {
+        gameDetailsPrice.textContent = fmt.finalCents === 0 ? 'Free' : fmt.final;
+        if (fmt.disc > 0) {
+          gameDetailsPrice.innerHTML += ` <span style="font-size:12px; color:var(--price-orig); text-decoration:line-through; margin-left:4px;">${fmt.initial}</span> <span style="font-size:12px; color:var(--discount-text); background:var(--discount-bg); padding:2px 4px; border-radius:3px; margin-left:4px;">-${fmt.disc}%</span>`;
+        }
+      }
+    } else {
+      gameDetailsPrice.textContent = isPlayed ? 'N/A' : 'Free / N/A';
+    }
+  } else {
+    gameDetailsPrice.textContent = priceData === 'loading' ? 'Loading…' : 'N/A';
+  }
+
+  const reviewData = state.reviews[appid];
+  if (reviewData && reviewData !== 'loading') {
+    if (reviewData.total < 10) {
+      gameDetailsReview.textContent = 'No reviews';
+      gameDetailsReview.className = 'stat-value';
+      gameDetailsReview.style.color = 'var(--text-dim)';
+    } else {
+      gameDetailsReview.textContent = `${reviewData.pct}% (${reviewData.desc})`;
+      gameDetailsReview.className = `stat-value ${reviewClass(reviewData.score)}`;
+      gameDetailsReview.title = `${reviewData.positive.toLocaleString()} / ${reviewData.total.toLocaleString()} positive`;
+      gameDetailsReview.style.color = '';
+    }
+  } else {
+    gameDetailsReview.textContent = reviewData === 'loading' ? 'Loading…' : 'N/A';
+    gameDetailsReview.className = 'stat-value';
+    gameDetailsReview.style.color = 'var(--text-dim)';
+  }
+
+  const hltbData = state.hltb[appid];
+  if (hltbData && hltbData !== 'loading') {
+    const main = formatHours(hltbData.main);
+    const extra = formatHours(hltbData.extra);
+    const complete = formatHours(hltbData.complete);
+    const parts = [];
+    if (main) parts.push(`Main: ${main}`);
+    if (extra) parts.push(`+Extra: ${extra}`);
+    if (complete) parts.push(`100%: ${complete}`);
+    gameDetailsHltb.textContent = parts.length > 0 ? parts.join(' | ') : 'Unknown';
+  } else {
+    gameDetailsHltb.textContent = hltbData === 'loading' ? 'Loading…' : 'Unknown';
+  }
+
+  // Reset and fetch extended details
+  gameDetailsDesc.textContent = 'Loading details...';
+  gameDetailsRelease.textContent = '—';
+  gameDetailsDev.textContent = '—';
+  gameDetailsDev.title = '';
+  gameDetailsGenres.textContent = '—';
+  gameDetailsGenres.title = '';
+  gameDetailsMetacritic.textContent = '—';
+  gameDetailsFeatures.textContent = '—';
+  gameDetailsTags.textContent = '—';
+
+  fetch(`/api/details/${appid}?cc=${state.currency}`)
+    .then(res => res.ok ? res.json() : Promise.reject('Failed to fetch'))
+    .then(data => {
+      if (Object.keys(data).length === 0) {
+        if (gameDetailsDesc.textContent.includes('Loading')) gameDetailsDesc.textContent = 'No additional details available for this title.';
+        return;
+      }
+      if (data.short_description) {
+        gameDetailsDesc.innerHTML = data.short_description; // Use innerHTML to handle Steam's <br> and <b> tags
+      } else {
+        gameDetailsDesc.textContent = 'No description available.';
+      }
+      gameDetailsRelease.textContent = data.release_date || 'Unknown';
+      
+      const devs = data.developers && data.developers.length ? data.developers.join(', ') : 'Unknown';
+      gameDetailsDev.textContent = devs; gameDetailsDev.title = devs;
+      
+      const genres = data.genres && data.genres.length ? data.genres.join(', ') : 'Unknown';
+      gameDetailsGenres.textContent = genres; gameDetailsGenres.title = genres;
+      
+      if (data.metacritic) {
+        gameDetailsMetacritic.textContent = data.metacritic;
+        gameDetailsMetacritic.style.color = data.metacritic >= 75 ? '#66cc33' : (data.metacritic >= 50 ? '#ffcc33' : '#ff0000');
+      } else {
+        gameDetailsMetacritic.textContent = 'N/A';
+        gameDetailsMetacritic.style.color = 'var(--text-dim)';
+      }
+      
+      gameDetailsFeatures.textContent = data.categories && data.categories.length ? data.categories.join(' • ') : 'None listed';
+      gameDetailsTags.textContent = data.tags && data.tags.length ? data.tags.join(', ') : 'None listed';
+    }).catch(() => gameDetailsDesc.textContent = 'Failed to load extended details.');
+
+  const updateModalButtons = () => {
+    const done = completed.has(appid);
+    const play = playing.has(appid);
+    const ign = ignored.has(appid);
+    gameDetailsCompleteBtn.textContent = done ? '✓ Completed' : 'Completed';
+    gameDetailsCompleteBtn.className = 'complete-btn' + (done ? ' is-complete' : '');
+    if (gameDetailsPlayingBtn) {
+      gameDetailsPlayingBtn.textContent = play ? '▶ Playing' : 'Playing';
+      gameDetailsPlayingBtn.className = 'complete-btn' + (play ? ' is-playing-btn' : '');
+    }
+    gameDetailsIgnoreBtn.textContent = ign ? '🚫 Ignored' : 'Ignore';
+    gameDetailsIgnoreBtn.className = 'complete-btn' + (ign ? ' is-ignored-btn' : '');
+  };
+  
+  updateModalButtons();
+  gameDetailsCompleteBtn.onclick = () => { toggleCompleted(appid); updateModalButtons(); };
+  if (gameDetailsPlayingBtn) gameDetailsPlayingBtn.onclick = () => { togglePlaying(appid); updateModalButtons(); };
+  gameDetailsIgnoreBtn.onclick = () => { toggleIgnored(appid); updateModalButtons(); };
+
+  if (gameDetailsModal) gameDetailsModal.style.display = 'flex';
 }
 
 // ── Card building ─────────────────────────────────
 function buildCard(game) {
   const appid    = String(game.appid);
-  const hours    = hoursLabel(game.playtime_forever);
-  const unplayed = !game.playtime_forever;
+  const hours    = hoursLabel(getPlaytime(game));
+  const unplayed = getPlaytime(game) <= 0;
 
   const card = document.createElement('div');
   card.className = 'game-card';
@@ -461,41 +926,207 @@ function buildCard(game) {
   const priceEl = document.createElement('div');
   priceEl.className = 'card-price';
   priceEl.dataset.appid = appid;
-  renderPriceEl(priceEl, priceData, unplayed);
+  renderPriceEl(priceEl, priceData, game);
   body.appendChild(priceEl);
 
-  // Complete toggle button
+  // Action buttons group
+  const btnGroup = document.createElement('div');
+  btnGroup.style.display = 'flex';
+  btnGroup.style.gap = '6px';
+  btnGroup.style.marginTop = '6px';
+
   const completeBtn = document.createElement('button');
   completeBtn.className = 'complete-btn' + (completed.has(appid) ? ' is-complete' : '');
-  completeBtn.textContent = completed.has(appid) ? '✓ Completed' : 'Mark as Completed';
+  completeBtn.textContent = completed.has(appid) ? '✓ Completed' : 'Completed';
+  completeBtn.style.flex = '1';
+  completeBtn.style.marginTop = '0';
   completeBtn.addEventListener('click', e => { e.stopPropagation(); toggleCompleted(appid); });
-  body.appendChild(completeBtn);
+  
+  const playingBtn = document.createElement('button');
+  playingBtn.className = 'complete-btn' + (playing.has(appid) ? ' is-playing-btn' : '');
+  playingBtn.textContent = playing.has(appid) ? '▶ Playing' : 'Playing';
+  playingBtn.style.flex = '1';
+  playingBtn.style.marginTop = '0';
+  playingBtn.addEventListener('click', e => { e.stopPropagation(); togglePlaying(appid); });
+
+  const ignoreBtn = document.createElement('button');
+  ignoreBtn.className = 'complete-btn' + (ignored.has(appid) ? ' is-ignored-btn' : '');
+  ignoreBtn.textContent = ignored.has(appid) ? '🚫 Ignored' : 'Ignore';
+  ignoreBtn.style.flex = '1';
+  ignoreBtn.style.marginTop = '0';
+  ignoreBtn.addEventListener('click', e => { e.stopPropagation(); toggleIgnored(appid); });
+
+  btnGroup.appendChild(completeBtn);
+  btnGroup.appendChild(playingBtn);
+  btnGroup.appendChild(ignoreBtn);
+  body.appendChild(btnGroup);
 
   card.appendChild(body);
 
-  if (completed.has(appid)) {
-    card.classList.add('is-complete');
-    const overlay = document.createElement('div');
-    overlay.className = 'badge-completed-overlay';
-    overlay.textContent = '✓ Completed';
-    imgWrap.appendChild(overlay);
-  }
+  updateCardVisuals(card, appid);
 
-  card.addEventListener('click', () => window.open(`https://store.steampowered.com/app/${appid}`, '_blank'));
+  card.addEventListener('click', () => showGameDetails(appid));
   return card;
+}
+
+function buildTableRow(game) {
+  const appid    = String(game.appid);
+  const hours    = hoursLabel(getPlaytime(game));
+  const unplayed = getPlaytime(game) <= 0;
+  const priceData = state.prices[appid];
+
+  const tr = document.createElement('tr');
+  tr.className = 'game-row';
+  tr.dataset.appid = appid;
+
+  // Image
+  const tdImg = document.createElement('td');
+  const imgWrap = document.createElement('div');
+  imgWrap.className = 'table-image-wrap';
+  const img = document.createElement('img');
+  img.className = 'table-img';
+  img.loading = 'lazy';
+  img.alt = game.name || appid;
+  img.src = imageUrl(appid);
+  img.onerror = () => { img.style.display = 'none'; };
+  img.addEventListener('click', () => showGameDetails(appid));
+  imgWrap.appendChild(img);
+  
+  if (priceData && priceData !== 'loading' && priceData.discount_percent > 0 && !(cphCheckbox && cphCheckbox.checked)) {
+    const discWrap = document.createElement('span'); 
+    discWrap.className = 'badge-top-right';
+    discWrap.style.top = '4px'; discWrap.style.right = '4px';
+    const discBadge = document.createElement('span'); 
+    discBadge.className = 'badge-discount';
+    discBadge.style.fontSize = '10px';
+    discBadge.style.padding = '2px 4px';
+    discBadge.textContent = `-${priceData.discount_percent}%`;
+    discWrap.appendChild(discBadge);
+    imgWrap.appendChild(discWrap);
+  }
+  tdImg.appendChild(imgWrap);
+  tr.appendChild(tdImg);
+
+  // Title
+  const tdTitle = document.createElement('td');
+  const titleSpan = document.createElement('span');
+  titleSpan.className = 'table-title';
+  titleSpan.textContent = game.name || `App ${appid}`;
+  titleSpan.addEventListener('click', () => showGameDetails(appid));
+  tdTitle.appendChild(titleSpan);
+  tr.appendChild(tdTitle);
+
+  // Playtime
+  const tdPlaytime = document.createElement('td');
+  const ptBadge = document.createElement('span');
+  ptBadge.className = 'card-badge ' + (unplayed ? 'badge-unplayed' : 'badge-hours');
+  ptBadge.style.position = 'static';
+  ptBadge.style.display = 'inline-block';
+  ptBadge.textContent = unplayed ? 'Unplayed' : hours + ' played';
+  tdPlaytime.appendChild(ptBadge);
+  tr.appendChild(tdPlaytime);
+
+  // Price
+  const tdPrice = document.createElement('td');
+  tdPrice.className = 'card-price';
+  tdPrice.dataset.appid = appid;
+  renderPriceEl(tdPrice, priceData, game);
+  tr.appendChild(tdPrice);
+
+  // Review
+  const tdReview = document.createElement('td');
+  tdReview.className = 'card-review';
+  tdReview.dataset.appid = appid;
+  renderReviewEl(tdReview, state.reviews[appid]);
+  tr.appendChild(tdReview);
+
+  // HLTB
+  const tdHltb = document.createElement('td');
+  tdHltb.className = 'card-hltb';
+  tdHltb.dataset.appid = appid;
+  renderHltbEl(tdHltb, state.hltb[appid]);
+  tr.appendChild(tdHltb);
+
+  // Actions
+  const tdActions = document.createElement('td');
+  const actionsWrap = document.createElement('div');
+  actionsWrap.className = 'table-actions';
+  
+  const completeBtn = document.createElement('button');
+  completeBtn.className = 'complete-btn' + (completed.has(appid) ? ' is-complete' : '');
+  completeBtn.textContent = completed.has(appid) ? '✓ Completed' : 'Completed';
+  completeBtn.style.margin = '0';
+  completeBtn.addEventListener('click', e => { e.stopPropagation(); toggleCompleted(appid); });
+  
+  const playingBtn = document.createElement('button');
+  playingBtn.className = 'complete-btn' + (playing.has(appid) ? ' is-playing-btn' : '');
+  playingBtn.textContent = playing.has(appid) ? '▶ Playing' : 'Playing';
+  playingBtn.style.margin = '0';
+  playingBtn.addEventListener('click', e => { e.stopPropagation(); togglePlaying(appid); });
+
+  const ignoreBtn = document.createElement('button');
+  ignoreBtn.className = 'complete-btn' + (ignored.has(appid) ? ' is-ignored-btn' : '');
+  ignoreBtn.textContent = ignored.has(appid) ? '🚫 Ignored' : 'Ignore';
+  ignoreBtn.style.margin = '0';
+  ignoreBtn.addEventListener('click', e => { e.stopPropagation(); toggleIgnored(appid); });
+
+  actionsWrap.appendChild(completeBtn);
+  actionsWrap.appendChild(playingBtn);
+  actionsWrap.appendChild(ignoreBtn);
+  tdActions.appendChild(actionsWrap);
+  tr.appendChild(tdActions);
+
+  updateCardVisuals(tr, appid);
+  return tr;
 }
 
 // ── Grid + pagination ─────────────────────────────
 function renderGrid() {
   gameGrid.innerHTML = '';
-  const start = (state.page - 1) * PAGE_SIZE;
-  const page  = state.filtered.slice(start, start + PAGE_SIZE);
-  page.forEach(game => gameGrid.appendChild(buildCard(game)));
+  const isTable = viewModeSelect && viewModeSelect.value === 'table';
+  
+  let page;
+  if (isTable) {
+    page = state.filtered; // Show all
+  } else {
+    const start = (state.page - 1) * PAGE_SIZE;
+    page = state.filtered.slice(start, start + PAGE_SIZE);
+  }
+  
+  if (isTable) {
+    gameGrid.className = 'game-table-wrap';
+    const table = document.createElement('table');
+    table.className = 'game-table';
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+      <tr>
+        <th style="width: 120px;">Image</th>
+        <th>Title</th>
+        <th>Playtime</th>
+        <th>Price</th>
+        <th>Steam Score</th>
+        <th>Time to Beat</th>
+        <th style="width: 110px;">Actions</th>
+      </tr>
+    `;
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    page.forEach(game => tbody.appendChild(buildTableRow(game)));
+    table.appendChild(tbody);
+    gameGrid.appendChild(table);
+  } else {
+    gameGrid.className = 'game-grid';
+    page.forEach(game => gameGrid.appendChild(buildCard(game)));
+  }
+  
   loadPricesForPage(page);
 }
 
 function renderPagination() {
   pagination.innerHTML = '';
+  const isTable = viewModeSelect && viewModeSelect.value === 'table';
+  if (isTable) return; // Hide pagination in table view
+
   const totalPages = Math.ceil(state.filtered.length / PAGE_SIZE);
   if (totalPages <= 1) return;
 
@@ -533,22 +1164,77 @@ function renderPagination() {
 
 function updateResultsCount() {
   const total = state.filtered.length;
-  const start = (state.page - 1) * PAGE_SIZE + 1;
-  const end   = Math.min(state.page * PAGE_SIZE, total);
-  elResultsCount.textContent = total
+  const isTable = viewModeSelect && viewModeSelect.value === 'table';
+  const start = total === 0 ? 0 : (isTable ? 1 : (state.page - 1) * PAGE_SIZE + 1);
+  const end   = isTable ? total : Math.min(state.page * PAGE_SIZE, total);
+  
+  let text = total
     ? `Showing ${start}–${end} of ${total} games`
     : 'No games match this filter';
+
+  if (state.allGames.length > 0) {
+    let detailsLoaded = 0;
+    state.allGames.forEach(g => {
+      const d = state.details[g.appid];
+      if (d !== undefined && d !== 'loading') detailsLoaded++;
+    });
+    if (detailsLoaded < state.allGames.length) {
+      const pct = Math.floor((detailsLoaded / state.allGames.length) * 100);
+      text += `  |  ⏳ Scanning library data (${pct}%)`;
+    }
+  }
+  
+  if (elResultsCount) elResultsCount.textContent = text;
 }
 
-function applyFilterSort() {
+function saveControls() {
+  const controls = {
+    filter: filterSelect?.value,
+    sort: sortSelect?.value,
+    sortDir: sortDirSelect?.value,
+    viewMode: viewModeSelect?.value,
+    showIgnored: showIgnoredCheckbox?.checked,
+    cph: cphCheckbox?.checked,
+    genre: genreFilterSelect?.dataset?.savedValue || genreFilterSelect?.value,
+    search: searchInput?.value || ''
+  };
+  try { localStorage.setItem('sbs_controls', JSON.stringify(controls)); } catch (_) {}
+}
+
+function applyFilterSort(preservePage = false) {
+  const shouldPreserve = preservePage === true;
+  saveControls();
   const filter = filterSelect.value;
   const sort   = sortSelect.value;
+  const sortDir= sortDirSelect?.value === 'asc' ? 1 : -1;
+  const genreFilter = genreFilterSelect?.value || 'any';
+  const showIgnored = showIgnoredCheckbox?.checked;
+  const searchTerm = (searchInput?.value || '').toLowerCase().trim();
   let list = [...state.allGames];
 
-  if (filter === 'unplayed')     list = list.filter(g => !g.playtime_forever);
-  if (filter === 'played')       list = list.filter(g =>  g.playtime_forever > 0);
+  if (!showIgnored) {
+    list = list.filter(g => !ignored.has(String(g.appid)));
+  }
+
+  if (searchTerm) {
+    list = list.filter(g => (g.name || '').toLowerCase().includes(searchTerm));
+  }
+
+  if (filter === 'unplayed')     list = list.filter(g => getPlaytime(g) <= 0);
+  if (filter === 'played')       list = list.filter(g => getPlaytime(g) > 0);
   if (filter === 'completed')    list = list.filter(g =>  completed.has(String(g.appid)));
+  if (filter === 'playing')      list = list.filter(g =>  playing.has(String(g.appid)));
   if (filter === 'not_completed')list = list.filter(g => !completed.has(String(g.appid)));
+
+  if (genreFilter !== 'any') {
+    list = list.filter(g => {
+      const details = state.details[String(g.appid)];
+      if (!details || details === 'loading') return false;
+      const hasGenre = details.genres?.includes(genreFilter);
+      const hasTag = details.tags?.includes(genreFilter);
+      return hasGenre || hasTag;
+    });
+  }
 
   // null / loading / not-yet-fetched prices sort as 0 (free/unavailable)
   const priceOf = g => {
@@ -564,31 +1250,80 @@ function applyFilterSort() {
     const r = state.reviews[String(g.appid)];
     return (r && r !== 'loading' && r !== null) ? (r.total || 0) : -1;
   };
+  const hltbOf = g => {
+    const h = state.hltb[String(g.appid)];
+    return (h && h !== 'loading' && h !== null && h.main != null) ? h.main : -1;
+  };
   // positive-review count = total × (pct/100); rewards popular AND well-rated games
   const popularityOf = g => {
     const r = state.reviews[String(g.appid)];
     return (r && r !== 'loading' && r !== null && r.total) ? r.total * r.pct / 100 : -1;
   };
+  
+  // SteamDB's algorithm: balances review percentage against the volume of reviews
+  const topRatedOf = g => {
+    const r = state.reviews[String(g.appid)];
+    if (!r || r === 'loading' || r === null || !r.total) return -1;
+    return r.pct - (r.pct - 50) * Math.pow(2, -Math.log10(r.total + 1));
+  };
 
-  switch (sort) {
-    case 'unplayed_first':
-      list.sort((a, b) => {
-        const ap = a.playtime_forever > 0 ? 1 : 0, bp = b.playtime_forever > 0 ? 1 : 0;
-        return ap !== bp ? ap - bp : priceOf(b) - priceOf(a);
-      }); break;
-    case 'price_desc':    list.sort((a, b) => priceOf(b)      - priceOf(a));      break;
-    case 'price_asc':     list.sort((a, b) => priceOf(a)      - priceOf(b));      break;
-    case 'review_desc':   list.sort((a, b) => reviewOf(b)     - reviewOf(a));     break;
-    case 'most_reviews':  list.sort((a, b) => reviewCountOf(b)- reviewCountOf(a)); break;
-    case 'popular':       list.sort((a, b) => popularityOf(b) - popularityOf(a)); break;
-    case 'playtime_desc': list.sort((a, b) => (b.playtime_forever||0) - (a.playtime_forever||0)); break;
-    case 'playtime_asc':  list.sort((a, b) => (a.playtime_forever||0) - (b.playtime_forever||0)); break;
-    case 'name_asc':  list.sort((a, b) => (a.name||'').localeCompare(b.name||'')); break;
-    case 'name_desc': list.sort((a, b) => (b.name||'').localeCompare(a.name||'')); break;
-  }
+  const releaseDateOf = g => {
+    const d = state.details[String(g.appid)];
+    const dateStr = d && d !== 'loading' ? d.release_date : null;
+    return dateStr ? new Date(dateStr).getTime() || 0 : 0;
+  };
+
+  const getSortVal = (g) => {
+    switch (sort) {
+      case 'price': return priceOf(g);
+      case 'review': return reviewOf(g);
+      case 'review_count': return reviewCountOf(g);
+      case 'last_played': return g.rtime_last_played || 0;
+      case 'release': return releaseDateOf(g);
+      case 'popular': return popularityOf(g);
+      case 'top_rated': return topRatedOf(g);
+      case 'playtime': return getPlaytime(g);
+      case 'hltb': return hltbOf(g);
+      default: return 0;
+    }
+  };
+
+  list.sort((a, b) => {
+    if (sort === 'name') {
+      const na = (a.name || '').toLowerCase();
+      const nb = (b.name || '').toLowerCase();
+      return sortDir === 1 ? na.localeCompare(nb) : nb.localeCompare(na);
+    }
+    
+    if (sort === 'unplayed') {
+      const ap = getPlaytime(a) > 0 ? 1 : 0;
+      const bp = getPlaytime(b) > 0 ? 1 : 0;
+      if (ap !== bp) {
+        return sortDir === 1 ? ap - bp : bp - ap;
+      }
+      return priceOf(b) - priceOf(a); // secondary sort by price desc
+    }
+
+    const va = getSortVal(a);
+    const vb = getSortVal(b);
+
+    const isMissing = (v) => v === -1 || ((sort === 'last_played' || sort === 'release') && v === 0);
+    const aMiss = isMissing(va);
+    const bMiss = isMissing(vb);
+    if (aMiss && bMiss) return 0;
+    if (aMiss) return 1;
+    if (bMiss) return -1;
+
+    return sortDir === 1 ? va - vb : vb - va;
+  });
 
   state.filtered = list;
-  state.page = 1;
+  if (!shouldPreserve) {
+    state.page = 1;
+  } else {
+    const maxPage = Math.ceil(state.filtered.length / PAGE_SIZE) || 1;
+    if (state.page > maxPage) state.page = maxPage;
+  }
   renderGrid();
   renderPagination();
   updateResultsCount();
@@ -621,19 +1356,37 @@ async function submitLoad(steamInput, apiKey, currency) {
 
     Object.assign(state, {
       allGames: games, apiKey, steamId, currency,
-      prices: {}, reviews: {}, hltb: {}, page: 1,
+      prices: {}, reviews: {}, hltb: {}, details: {}, page: 1,
       totalCents: 0, unplayedCents: 0, uncompletedCents: 0, pricedCount: 0,
     });
+    
+    // Fast preload from backend cache
+    try {
+      const preloadRes = await fetch(`/api/cache/preload?cc=${currency}`);
+      if (preloadRes.ok) {
+        const cached = await preloadRes.json();
+        const libraryIds = new Set(games.map(g => String(g.appid)));
+        
+        Object.entries(cached.prices || {}).forEach(([id, p]) => { if (libraryIds.has(id)) state.prices[id] = p; });
+        Object.entries(cached.reviews || {}).forEach(([id, r]) => { if (libraryIds.has(id)) state.reviews[id] = r; });
+        Object.entries(cached.details || {}).forEach(([id, detailObj]) => { 
+          if (libraryIds.has(id)) {
+            state.details[id] = detailObj;
+            if (detailObj?.genres?.length) detailObj.genres.forEach(g => knownGenres.add(g));
+            if (detailObj?.tags?.length) detailObj.tags.forEach(t => knownGenres.add(t));
+          }
+        });
+      }
+    } catch(e) { console.error('Cache preload failed', e); }
 
-    const unplayed = games.filter(g => !g.playtime_forever).length;
-    const uncompleted = games.filter(g => !completed.has(String(g.appid))).length;
-    elStatGames.textContent     = games.length.toLocaleString();
-    elStatUnplayed.textContent  = unplayed.toLocaleString();
-    if (elStatUncompleted) elStatUncompleted.textContent = uncompleted.toLocaleString();
+    renderGenreDropdowns();
+
     elTotalValue.textContent    = formatCents(0);
     elUnplayedValue.textContent = formatCents(0);
     if (elUncompletedValue) elUncompletedValue.textContent = formatCents(0);
-    elStatPriced.textContent    = `0 / ${games.length}`;
+    if (elUncompletedTime) elUncompletedTime.textContent = '0h';
+
+    updateTotals();
 
     setupSection.style.display = 'none';
     storeSection.style.display = 'block';
@@ -645,6 +1398,7 @@ async function submitLoad(steamInput, apiKey, currency) {
     backgroundLoadAll();
     backgroundLoadReviews();
     backgroundLoadHltb();
+    backgroundLoadDetails();
 
   } catch (err) {
     clearLoading();
@@ -667,14 +1421,235 @@ setupForm.addEventListener('submit', async (e) => {
 
 filterSelect.addEventListener('change', applyFilterSort);
 sortSelect.addEventListener('change', applyFilterSort);
+if (sortDirSelect) sortDirSelect.addEventListener('change', applyFilterSort);
+if (genreFilterSelect) genreFilterSelect.addEventListener('change', applyFilterSort);
+if (showIgnoredCheckbox) showIgnoredCheckbox.addEventListener('change', applyFilterSort);
+if (viewModeSelect) {
+  viewModeSelect.addEventListener('change', () => {
+    saveControls();
+    renderGrid();
+    renderPagination();
+    updateResultsCount();
+  });
+}
+if (searchInput) {
+  searchInput.addEventListener('input', () => applyFilterSort());
+}
+if (cphCheckbox) {
+  cphCheckbox.addEventListener('change', () => {
+    saveControls();
+    document.querySelectorAll('.card-price').forEach(el => {
+      const appid = el.dataset.appid;
+      const game = state.allGames.find(g => String(g.appid) === appid);
+      renderPriceEl(el, state.prices[appid], game);
+    });
+  });
+}
 
 backBtn.addEventListener('click', () => {
   storeSection.style.display = 'none';
   setupSection.style.display = 'flex';
 });
 
+// ── Recommendations ───────────────────────────────
+function getRecommendationScore(g) {
+  let score = 0;
+  const appid = String(g.appid);
+  
+  // Exclude completed and ignored games entirely
+  if (completed.has(appid) || ignored.has(appid)) return -9999;
+  
+  const recLength = document.getElementById('recLength')?.value || 'any';
+  const recPop = document.getElementById('recPopularity')?.value || 'any';
+  const recEra = document.getElementById('recEra')?.value || 'any';
+  const recGenre = document.getElementById('recGenre')?.value || 'any';
+  const recVariance = document.getElementById('recVariance')?.value || 'medium';
+
+  // Reviews: always heavily weight positive reviews
+  const r = state.reviews[appid];
+  if (r && r !== 'loading' && r !== null) {
+    if (r.pct >= 90) score += 30;
+    else if (r.pct >= 80) score += 15;
+    else if (r.pct < 60) score -= 20;
+    
+    if (recPop === 'high') {
+      if (r.total > 50000) score += 30;
+      else if (r.total < 5000) score -= 20;
+    } else if (recPop === 'low') {
+      if (r.total < 5000) score += 30;
+      else if (r.total > 50000) score -= 20;
+    } else {
+      if (r.total > 100000) score += 20;
+      else if (r.total > 10000) score += 10;
+      else if (r.total > 1000) score += 5;
+    }
+  }
+  
+  // HLTB length refinement
+  const h = state.hltb[appid];
+  if (h && h !== 'loading' && h !== null && h.main != null) {
+    if (h.main <= 0) {
+      score -= 5;
+    } else if (recLength === 'short') {
+      if (h.main <= 10) score += 30;
+      else score -= 20;
+    } else if (recLength === 'medium') {
+      if (h.main > 10 && h.main <= 30) score += 30;
+      else score -= 20;
+    } else if (recLength === 'long') {
+      if (h.main > 30) score += 30;
+      else score -= 20;
+    } else {
+      if (h.main <= 5) score += 25;
+      else if (h.main <= 12) score += 20;
+      else if (h.main <= 25) score += 5;
+      else score -= (h.main - 25); // Penalize very long games
+    }
+  } else {
+    score -= 5; // Slight penalty for unknown length
+  }
+  
+  // Era (Using AppID as a reliable proxy for release date: <400k = pre-2015, >1M = post-2019)
+  const numId = parseInt(appid, 10);
+  if (recEra === 'newer') {
+    if (numId > 1000000) score += 20;
+    else if (numId < 400000) score -= 15;
+  } else if (recEra === 'older') {
+    if (numId < 400000) score += 20;
+    else if (numId > 1000000) score -= 15;
+  }
+
+  // Playtime: Prefer unplayed or barely played
+  if (getPlaytime(g) <= 0) score += 15;
+  else if (getPlaytime(g) < 120) score += 5; // Less than 2 hours
+  else score -= (getPlaytime(g) / 60); // Penalize games already played a lot but not completed
+  
+  // Priority Genre
+  if (recGenre !== 'any') {
+    const details = state.details[appid];
+    if (details && details !== 'loading') {
+      const hasGenre = details.genres?.includes(recGenre);
+      const hasTag = details.tags?.includes(recGenre);
+      if (hasGenre || hasTag) {
+        score += 50; // Massive boost for hitting the requested genre
+      } else {
+        score -= 50; // Huge penalty if it misses the target genre entirely
+      }
+    } else {
+      score -= 50;
+    }
+  }
+
+  // Random noise / variance
+  let noise = 5;
+  if (recVariance === 'low') noise = 1;
+  else if (recVariance === 'high') noise = 40;
+  score += Math.random() * noise;
+
+  return score;
+}
+
+function generateRecommendations() {
+  const candidates = state.allGames.map(g => ({ game: g, score: getRecommendationScore(g) }));
+  const top = candidates.filter(c => c.score > -1000).sort((a, b) => b.score - a.score).slice(0, 6).map(c => c.game);
+    
+  if (recommendGrid) {
+    recommendGrid.innerHTML = '';
+    if (top.length === 0) {
+      recommendGrid.innerHTML = '<p style="color: var(--text-dim); padding: 20px;">No recommendations available matching these criteria.</p>';
+    } else {
+      top.forEach(game => recommendGrid.appendChild(buildCard(game)));
+      loadPricesForPage(top); // Ensure prices are fetched if they weren't visible yet
+    }
+  }
+}
+
+if (surpriseMeBtn) {
+  surpriseMeBtn.addEventListener('click', () => {
+    const candidates = state.allGames.map(g => ({ game: g, score: getRecommendationScore(g) }));
+    const top = candidates.filter(c => c.score > -1000).sort((a, b) => b.score - a.score).slice(0, 10).map(c => c.game);
+    if (top.length > 0) {
+      const randomGame = top[Math.floor(Math.random() * top.length)];
+      showGameDetails(String(randomGame.appid));
+    } else {
+      alert('No recommended games left to play! Time to buy more games?');
+    }
+  });
+}
+
+if (recommendBtn) {
+  recommendBtn.addEventListener('click', () => {
+    generateRecommendations();
+    if (recommendModal) recommendModal.style.display = 'flex';
+  });
+}
+
+if (closeRecommendBtn && recommendModal) {
+  closeRecommendBtn.addEventListener('click', () => recommendModal.style.display = 'none');
+  recommendModal.addEventListener('click', (e) => {
+    if (e.target === recommendModal) recommendModal.style.display = 'none';
+  });
+}
+
+if (closeGameDetailsBtn && gameDetailsModal) {
+  closeGameDetailsBtn.addEventListener('click', () => gameDetailsModal.style.display = 'none');
+  gameDetailsModal.addEventListener('click', (e) => {
+    if (e.target === gameDetailsModal) gameDetailsModal.style.display = 'none';
+  });
+}
+
+// Bind refine elements
+['recLength', 'recPopularity', 'recEra', 'recGenre', 'recVariance'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', generateRecommendations);
+});
+const recRefreshBtn = document.getElementById('recRefreshBtn');
+if (recRefreshBtn) recRefreshBtn.addEventListener('click', generateRecommendations);
+
 // ── Auto-load from localStorage ───────────────────
 (function init() {
+  try {
+    const controls = JSON.parse(localStorage.getItem('sbs_controls') || '{}');
+    if (controls.filter && filterSelect) filterSelect.value = controls.filter;
+    
+    // Migration logic for old sort values
+    const oldToNewSort = {
+      unplayed_first: { sort: 'unplayed', dir: 'asc' },
+      price_desc: { sort: 'price', dir: 'desc' },
+      price_asc: { sort: 'price', dir: 'asc' },
+      review_desc: { sort: 'review', dir: 'desc' },
+      most_reviews: { sort: 'review_count', dir: 'desc' },
+      recent_played: { sort: 'last_played', dir: 'desc' },
+      oldest_played: { sort: 'last_played', dir: 'asc' },
+      release_new: { sort: 'release', dir: 'desc' },
+      release_old: { sort: 'release', dir: 'asc' },
+      popular: { sort: 'popular', dir: 'desc' },
+      top_rated: { sort: 'top_rated', dir: 'desc' },
+      playtime_desc: { sort: 'playtime', dir: 'desc' },
+      playtime_asc: { sort: 'playtime', dir: 'asc' },
+      hltb_asc: { sort: 'hltb', dir: 'asc' },
+      hltb_desc: { sort: 'hltb', dir: 'desc' },
+      name_asc: { sort: 'name', dir: 'asc' },
+      name_desc: { sort: 'name', dir: 'desc' }
+    };
+    
+    if (controls.sort) {
+      if (oldToNewSort[controls.sort]) {
+        if (sortSelect) sortSelect.value = oldToNewSort[controls.sort].sort;
+        if (sortDirSelect) sortDirSelect.value = oldToNewSort[controls.sort].dir;
+      } else {
+        if (sortSelect) sortSelect.value = controls.sort;
+        if (controls.sortDir && sortDirSelect) sortDirSelect.value = controls.sortDir;
+      }
+    }
+    
+    if (controls.viewMode && viewModeSelect) viewModeSelect.value = controls.viewMode;
+    if (controls.showIgnored !== undefined && showIgnoredCheckbox) showIgnoredCheckbox.checked = controls.showIgnored;
+    if (controls.cph !== undefined && cphCheckbox) cphCheckbox.checked = controls.cph;
+    if (controls.genre && genreFilterSelect) genreFilterSelect.dataset.savedValue = controls.genre;
+    if (controls.search !== undefined && searchInput) searchInput.value = controls.search;
+  } catch (_) {}
+
   const saved = loadProfile();
   if (!saved) return;
   document.getElementById('steamInput').value     = saved.steamInput || '';

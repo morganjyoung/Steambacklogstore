@@ -116,6 +116,18 @@
         <span class="stat-value highlight-secondary" id="unplayedValue">$0.00</span>
       </div>
       <div class="banner-stat">
+        <span class="stat-label">Uncompleted</span>
+        <span class="stat-value" id="statUncompleted">—</span>
+      </div>
+      <div class="banner-stat">
+        <span class="stat-label">Uncompleted Value</span>
+        <span class="stat-value highlight-secondary" id="uncompletedValue">$0.00</span>
+      </div>
+      <div class="banner-stat">
+        <span class="stat-label">Uncompleted Time</span>
+        <span class="stat-value" id="uncompletedTime">—</span>
+      </div>
+      <div class="banner-stat">
         <span class="stat-label">Priced So Far</span>
         <span class="stat-value" id="statPriced">0 / 0</span>
       </div>
@@ -130,30 +142,65 @@
       </div>
       <div class="controls-right">
         <div class="control-group">
+          <input type="text" id="searchInput" placeholder="Search games..." autocomplete="off" spellcheck="false" class="search-input" />
+        </div>
+        <div class="control-group">
+          <label for="viewModeSelect">View</label>
+          <select id="viewModeSelect">
+            <option value="grid">Grid</option>
+            <option value="table">Table</option>
+          </select>
+        </div>
+        <div class="control-group">
           <label for="filterSelect">Filter</label>
           <select id="filterSelect">
             <option value="all">All Games</option>
             <option value="unplayed">Unplayed Only</option>
             <option value="played">Played Only</option>
             <option value="completed">Completed</option>
+            <option value="playing">Currently Playing</option>
             <option value="not_completed">Not Completed</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="genreFilterSelect">Tags & Genres</label>
+          <select id="genreFilterSelect">
+            <option value="any">All Tags</option>
           </select>
         </div>
         <div class="control-group">
           <label for="sortSelect">Sort By</label>
           <select id="sortSelect">
-            <option value="unplayed_first">Unplayed First</option>
-            <option value="price_desc">Highest Price</option>
-            <option value="price_asc">Lowest Price</option>
-            <option value="review_desc">Steam Score</option>
-            <option value="most_reviews">Most Reviews</option>
+            <option value="unplayed">Unplayed Status</option>
+            <option value="price">Price</option>
+            <option value="review">Steam Score</option>
+            <option value="review_count">Review Count</option>
+            <option value="last_played">Last Played</option>
+            <option value="release">Release Era</option>
             <option value="popular">Most Popular</option>
-            <option value="playtime_desc">Most Played</option>
-            <option value="playtime_asc">Least Played</option>
-            <option value="name_asc">A → Z</option>
-            <option value="name_desc">Z → A</option>
+            <option value="top_rated">Top Rated</option>
+            <option value="playtime">Playtime</option>
+            <option value="hltb">Time to Beat</option>
+            <option value="name">Name</option>
           </select>
         </div>
+        <div class="control-group">
+          <label for="sortDirSelect">Order</label>
+          <select id="sortDirSelect">
+            <option value="desc">Descending ▼</option>
+            <option value="asc">Ascending ▲</option>
+          </select>
+        </div>
+        <div class="control-group" style="margin-right: 8px;">
+          <input type="checkbox" id="cphCheckbox" style="cursor: pointer; width: 14px; height: 14px;" />
+          <label for="cphCheckbox" style="cursor: pointer;">Cost/Hour</label>
+        </div>
+        <div class="control-group" style="margin-right: 8px;">
+          <input type="checkbox" id="showIgnoredCheckbox" style="cursor: pointer; width: 14px; height: 14px;" />
+          <label for="showIgnoredCheckbox" style="cursor: pointer;">Show Ignored</label>
+        </div>
+        <button class="btn-secondary" id="surpriseMeBtn" style="background: linear-gradient(to right, #e65c00, #F9D423); color: white; border-color: #e65c00; margin-right: 8px;">🚀 Surprise Me!</button>
+        <button class="btn-secondary" id="recommendBtn" style="background: linear-gradient(to right, #8f47ba, #6b2b91); color: white; border-color: #a35ad6;">🎲 What to Play?</button>
         <button class="btn-secondary" id="backBtn">← Change Profile</button>
       </div>
     </div>
@@ -169,6 +216,133 @@
 
 </section>
 
+<!-- ─── RECOMMEND MODAL ─── -->
+<div id="recommendModal" class="loading-overlay" style="display:none; z-index: 300; background: rgba(0,0,0,0.85);">
+  <div class="setup-card" style="max-width: 900px; width: 100%; padding: 24px; position: relative; max-height: 90vh; overflow-y: auto;">
+    <button id="closeRecommendBtn" style="position: absolute; right: 16px; top: 16px; background: transparent; border: none; color: var(--text-dim); font-size: 24px; cursor: pointer;">&times;</button>
+    <h2 style="font-size: 22px; margin-bottom: 8px; color: var(--text-primary);">🎲 Top Recommendations</h2>
+    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">Highly rated games you haven't finished. Adjust the filters below to refine your suggestions.</p>
+    
+    <div class="recommend-filters" style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; background: var(--bg-main); padding: 12px; border-radius: var(--radius); border: 1px solid var(--border-dim);">
+      <div class="control-group">
+        <label for="recLength">Length</label>
+        <select id="recLength">
+          <option value="any">Sweet Spot (3-15h)</option>
+          <option value="short">Short (< 10h)</option>
+          <option value="medium">Medium (10-30h)</option>
+          <option value="long">Epic (30h+)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="recPopularity">Popularity</label>
+        <select id="recPopularity">
+          <option value="any">Highly Popular</option>
+          <option value="high">Mainstream (50k+ Reviews)</option>
+          <option value="low">Hidden Gems (< 5k Reviews)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="recEra">Era</label>
+        <select id="recEra">
+          <option value="any">Any Era</option>
+          <option value="newer">Newer Releases</option>
+          <option value="older">Older Classics</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="recGenre">Tag / Genre</label>
+        <select id="recGenre">
+          <option value="any">Any Tag</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="recVariance">Variance</label>
+        <select id="recVariance">
+          <option value="low">Low (Strict)</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High (Wildcard)</option>
+        </select>
+      </div>
+      <button class="btn-secondary" id="recRefreshBtn" style="margin-left: auto;">↻ Reroll</button>
+    </div>
+
+    <div id="recommendGrid" class="game-grid"></div>
+  </div>
+</div>
+
+<!-- ─── GAME DETAILS MODAL ─── -->
+<div id="gameDetailsModal" class="loading-overlay" style="display:none; z-index: 400; background: rgba(0,0,0,0.85);">
+  <div class="setup-card" style="max-width: 600px; width: 100%; padding: 0; position: relative; max-height: 90vh; overflow-y: auto; border-radius: 8px; background: var(--bg-card); border: 1px solid var(--border);">
+    <button id="closeGameDetailsBtn" style="position: absolute; right: 16px; top: 16px; background: rgba(0,0,0,0.6); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; font-size: 20px; cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center;">&times;</button>
+    <div style="position: relative; width: 100%; padding-top: 46.7%; background: #0e1826;">
+      <img id="gameDetailsImg" src="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;" />
+    </div>
+    <div style="padding: 24px;">
+      <h2 id="gameDetailsTitle" style="font-size: 24px; margin-bottom: 8px; color: var(--text-primary); line-height: 1.3;">Game Title</h2>
+      <p id="gameDetailsDesc" style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; line-height: 1.5;">Loading description...</p>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+        <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim);">
+          <span class="stat-label">Playtime</span>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="stat-value" id="gameDetailsPlaytime">—</span>
+            <button id="gameDetailsAddHoursBtn" class="btn-secondary" style="padding: 2px 6px; font-size: 11px;">+ Edit</button>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim);">
+            <span class="stat-label">Price</span>
+            <span class="stat-value highlight" id="gameDetailsPrice">—</span>
+          </div>
+          <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim);">
+            <span class="stat-label">Metacritic</span>
+            <span class="stat-value" id="gameDetailsMetacritic" style="color: #66cc33;">—</span>
+          </div>
+        </div>
+        <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim);">
+          <span class="stat-label">Steam Score</span>
+          <span class="stat-value highlight-secondary" id="gameDetailsReview" style="font-size: 15px;">—</span>
+        </div>
+        <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim);">
+          <span class="stat-label">Time to Beat</span>
+          <span class="stat-value" id="gameDetailsHltb" style="font-size: 15px;">—</span>
+        </div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+        <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim);">
+          <span class="stat-label">Release Date</span>
+          <span class="stat-value" id="gameDetailsRelease" style="font-size: 13px;">—</span>
+        </div>
+        <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim);">
+          <span class="stat-label">Developer</span>
+          <span class="stat-value" id="gameDetailsDev" style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">—</span>
+        </div>
+        <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim);">
+          <span class="stat-label">Genres</span>
+          <span class="stat-value" id="gameDetailsGenres" style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">—</span>
+        </div>
+      </div>
+      <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim); margin-bottom: 12px;">
+        <span class="stat-label">Features</span>
+        <span class="stat-value" id="gameDetailsFeatures" style="font-size: 13px; color: var(--text-secondary);">—</span>
+      </div>
+      <div class="banner-stat" style="background: var(--bg-main); padding: 12px; border-radius: 6px; border: 1px solid var(--border-dim); margin-bottom: 24px;">
+        <span class="stat-label">User Tags</span>
+        <span class="stat-value" id="gameDetailsTags" style="font-size: 13px; color: var(--text-secondary);">—</span>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <a id="gameDetailsClientLink" href="#" class="btn-primary" style="text-align: center; text-decoration: none; flex: 1.5; min-width: 140px; margin: 0; padding: 12px;">Play / Install</a>
+        <a id="gameDetailsStoreLink" href="#" target="_blank" class="btn-secondary" style="text-align: center; text-decoration: none; flex: 1; min-width: 100px; margin: 0; padding: 12px; color: var(--text-primary);">Web Store</a>
+        <button id="gameDetailsCompleteBtn" class="complete-btn" style="flex: 1; min-width: 80px; margin: 0; padding: 12px; font-size: 13px;">Completed</button>
+        <button id="gameDetailsPlayingBtn" class="complete-btn" style="flex: 1; min-width: 80px; margin: 0; padding: 12px; font-size: 13px;">Playing</button>
+        <button id="gameDetailsIgnoreBtn" class="complete-btn" style="flex: 1; min-width: 80px; margin: 0; padding: 12px; font-size: 13px;">Ignore</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ─── LOADING OVERLAY ─── -->
 <div id="loadingOverlay" class="loading-overlay" style="display:none">
   <div class="loading-box">
@@ -177,6 +351,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 <script src="/static/js/app.js"></script>
 </body>
 </html>
