@@ -406,9 +406,15 @@ function applyFilterSort() {
   if (filter === 'unplayed') list = list.filter(g => !g.playtime_forever);
   if (filter === 'played')   list = list.filter(g =>  g.playtime_forever > 0);
 
+  // null / loading / not-yet-fetched prices sort as 0 (free/unavailable)
   const priceOf = g => {
     const p = state.prices[String(g.appid)];
-    return (p && p !== 'loading' && p !== null) ? p.final : Infinity;
+    return (p && p !== 'loading' && p !== null && p.final != null) ? p.final : 0;
+  };
+
+  const reviewOf = g => {
+    const r = state.reviews[String(g.appid)];
+    return (r && r !== 'loading' && r !== null) ? r.pct : -1;
   };
 
   switch (sort) {
@@ -417,13 +423,9 @@ function applyFilterSort() {
         const ap = a.playtime_forever > 0 ? 1 : 0, bp = b.playtime_forever > 0 ? 1 : 0;
         return ap !== bp ? ap - bp : priceOf(b) - priceOf(a);
       }); break;
-    case 'price_desc': list.sort((a, b) => priceOf(b) - priceOf(a)); break;
-    case 'price_asc':
-      list.sort((a, b) => {
-        const pa = priceOf(a), pb = priceOf(b);
-        if (pa === Infinity && pb === Infinity) return 0;
-        return pa === Infinity ? 1 : pb === Infinity ? -1 : pa - pb;
-      }); break;
+    case 'price_desc':   list.sort((a, b) => priceOf(b)  - priceOf(a));  break;
+    case 'price_asc':    list.sort((a, b) => priceOf(a)  - priceOf(b));  break;
+    case 'review_desc':  list.sort((a, b) => reviewOf(b) - reviewOf(a)); break;
     case 'playtime_desc': list.sort((a, b) => (b.playtime_forever||0) - (a.playtime_forever||0)); break;
     case 'playtime_asc':  list.sort((a, b) => (a.playtime_forever||0) - (b.playtime_forever||0)); break;
     case 'name_asc':  list.sort((a, b) => (a.name||'').localeCompare(b.name||'')); break;
