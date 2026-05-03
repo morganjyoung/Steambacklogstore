@@ -457,6 +457,48 @@ a:hover { text-decoration: underline; }
   color: var(--text-dim);
 }
 
+/* ── Completed overlay & toggle ── */
+.badge-completed-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 0;
+  background: rgba(74, 160, 44, 0.88);
+  color: #d9eea2;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+.game-card.is-complete { opacity: 0.72; }
+.game-card.is-complete:hover { opacity: 1; }
+
+.complete-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+  text-align: center;
+}
+.complete-btn:hover {
+  color: #8bc34a;
+  border-color: #4a8c28;
+}
+.complete-btn.is-complete {
+  color: #8bc34a;
+  border-color: #4a8c28;
+  background: rgba(74, 160, 44, 0.1);
+}
+
 /* ── Review score ── */
 .card-review {
   min-height: 16px;

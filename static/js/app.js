@@ -82,12 +82,49 @@ function imageUrl(appid) {
 }
 
 // ── localStorage ──────────────────────────────────
-const LS_KEY = 'sbs_profile';
+const LS_KEY           = 'sbs_profile';
+const LS_COMPLETED_KEY = 'sbs_completed';
+
 function saveProfile(steamInput, apiKey, currency) {
   try { localStorage.setItem(LS_KEY, JSON.stringify({ steamInput, apiKey, currency })); } catch (_) {}
 }
 function loadProfile() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (_) { return null; }
+}
+
+// Completed set persists across sessions, keyed by appid
+const completed = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem(LS_COMPLETED_KEY) || '[]')); }
+  catch (_) { return new Set(); }
+})();
+
+function saveCompleted() {
+  try { localStorage.setItem(LS_COMPLETED_KEY, JSON.stringify([...completed])); } catch (_) {}
+}
+
+function toggleCompleted(appid) {
+  if (completed.has(appid)) completed.delete(appid); else completed.add(appid);
+  saveCompleted();
+  const card = gameGrid.querySelector(`.game-card[data-appid="${appid}"]`);
+  if (card) applyCompletedVisual(card, appid);
+  const f = filterSelect.value;
+  if (f === 'completed' || f === 'not_completed') applyFilterSort();
+}
+
+function applyCompletedVisual(card, appid) {
+  const done = completed.has(appid);
+  card.classList.toggle('is-complete', done);
+  let overlay = card.querySelector('.badge-completed-overlay');
+  if (done && !overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'badge-completed-overlay';
+    overlay.textContent = '✓ Completed';
+    card.querySelector('.card-image-wrap').appendChild(overlay);
+  } else if (!done && overlay) {
+    overlay.remove();
+  }
+  const btn = card.querySelector('.complete-btn');
+  if (btn) { btn.classList.toggle('is-complete', done); btn.textContent = done ? '✓ Completed' : 'Mark as Completed'; }
 }
 
 // ── Animated counter ──────────────────────────────
@@ -338,7 +375,23 @@ function buildCard(game) {
   renderPriceEl(priceEl, priceData, unplayed);
   body.appendChild(priceEl);
 
+  // Complete toggle button
+  const completeBtn = document.createElement('button');
+  completeBtn.className = 'complete-btn' + (completed.has(appid) ? ' is-complete' : '');
+  completeBtn.textContent = completed.has(appid) ? '✓ Completed' : 'Mark as Completed';
+  completeBtn.addEventListener('click', e => { e.stopPropagation(); toggleCompleted(appid); });
+  body.appendChild(completeBtn);
+
   card.appendChild(body);
+
+  if (completed.has(appid)) {
+    card.classList.add('is-complete');
+    const overlay = document.createElement('div');
+    overlay.className = 'badge-completed-overlay';
+    overlay.textContent = '✓ Completed';
+    imgWrap.appendChild(overlay);
+  }
+
   card.addEventListener('click', () => window.open(`https://store.steampowered.com/app/${appid}`, '_blank'));
   return card;
 }
@@ -403,8 +456,10 @@ function applyFilterSort() {
   const sort   = sortSelect.value;
   let list = [...state.allGames];
 
-  if (filter === 'unplayed') list = list.filter(g => !g.playtime_forever);
-  if (filter === 'played')   list = list.filter(g =>  g.playtime_forever > 0);
+  if (filter === 'unplayed')     list = list.filter(g => !g.playtime_forever);
+  if (filter === 'played')       list = list.filter(g =>  g.playtime_forever > 0);
+  if (filter === 'completed')    list = list.filter(g =>  completed.has(String(g.appid)));
+  if (filter === 'not_completed')list = list.filter(g => !completed.has(String(g.appid)));
 
   // null / loading / not-yet-fetched prices sort as 0 (free/unavailable)
   const priceOf = g => {
