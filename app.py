@@ -26,6 +26,11 @@ def _store_price(appid: str, data):
         _price_cache[appid] = {"data": data, "ts": time.time()}
 
 
+@app.route("/favicon.ico")
+def favicon():
+    return "", 204
+
+
 @app.route("/")
 def index():
     return render_template("index.html", api_key=STEAM_API_KEY)
@@ -102,8 +107,8 @@ def get_prices():
         return jsonify({}), 400
 
     appids = [a.strip() for a in appids_raw.split(",") if a.strip()]
-    result: dict = {}
-    to_fetch: list[str] = []
+    result = {}
+    to_fetch = []
 
     for appid in appids:
         data, hit = _cached_price(appid)
