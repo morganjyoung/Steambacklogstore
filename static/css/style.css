@@ -515,6 +515,18 @@ a:hover { text-decoration: underline; }
 .review-negative { color: #cf6679; }
 .review-none     { color: var(--text-dim); font-size: 11px; }
 
+/* ── HowLongToBeat ── */
+.card-hltb { min-height: 14px; }
+.hltb-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  cursor: help;
+}
+
 /* ── Pagination ── */
 .pagination {
   display: flex;

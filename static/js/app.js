@@ -15,6 +15,7 @@ const state = {
   filtered: [],
   prices:   {},   // appid -> price_overview | null | 'loading'
   reviews:  {},   // appid -> {score, desc, pct, total} | null | 'loading'
+  hltb:     {},   // appid -> {main, extra, complete, matched} | null | 'loading'
   page: 1,
   apiKey: '',
   steamId: '',
@@ -107,8 +108,7 @@ function toggleCompleted(appid) {
   saveCompleted();
   const card = gameGrid.querySelector(`.game-card[data-appid="${appid}"]`);
   if (card) applyCompletedVisual(card, appid);
-  const f = filterSelect.value;
-  if (f === 'completed' || f === 'not_completed') applyFilterSort();
+  // No re-filter — the card updates visually in place; user can change filter manually
 }
 
 function applyCompletedVisual(card, appid) {
@@ -311,6 +311,65 @@ async function backgroundLoadReviews() {
   }
 }
 
+// ── HLTB render helpers ───────────────────────────
+function formatHours(h) {
+  if (!h || h <= 0) return null;
+  if (h < 1)  return '<1h';
+  if (h < 10) return `${parseFloat(h.toFixed(1))}h`;
+  return `${Math.round(h)}h`;
+}
+
+function renderHltbEl(el, hltbData) {
+  el.innerHTML = '';
+  if (!hltbData || hltbData === 'loading') return;
+  const main     = formatHours(hltbData.main);
+  const extra    = formatHours(hltbData.extra);
+  const complete = formatHours(hltbData.complete);
+  if (!main && !extra && !complete) return;
+  const parts = [];
+  if (main)     parts.push(`Main ${main}`);
+  if (extra)    parts.push(`+Extra ${extra}`);
+  if (complete) parts.push(`100% ${complete}`);
+  const s = document.createElement('span');
+  s.className = 'hltb-label';
+  s.textContent = '⏱ ' + parts.join(' · ');
+  s.title = parts.join(' | ') + (hltbData.matched ? ` (matched: ${hltbData.matched})` : '');
+  el.appendChild(s);
+}
+
+function updateCardHltb(appid, hltbData) {
+  const el = gameGrid.querySelector(`.card-hltb[data-appid="${appid}"]`);
+  if (el) renderHltbEl(el, hltbData);
+}
+
+async function backgroundLoadHltb() {
+  const BATCH = 5;
+  const all = state.allGames;
+  for (let i = 0; i < all.length; i += BATCH) {
+    if (storeSection.style.display === 'none') break;
+    const batch = all.slice(i, i + BATCH).filter(g => state.hltb[String(g.appid)] === undefined);
+    if (!batch.length) continue;
+    batch.forEach(g => { state.hltb[String(g.appid)] = 'loading'; });
+    try {
+      const payload = batch.map(g => ({ appid: String(g.appid), title: g.name || '' }));
+      const resp = await fetch('/api/hltb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      Object.entries(data).forEach(([appid, hltbData]) => {
+        state.hltb[appid] = hltbData;
+        updateCardHltb(appid, hltbData);
+      });
+    } catch (_) {
+      batch.forEach(g => { const id = String(g.appid); if (state.hltb[id] === 'loading') delete state.hltb[id]; });
+    }
+    await delay(1200);  // HLTB is a scraper — be gentle
+  }
+}
+
 // ── Card building ─────────────────────────────────
 function buildCard(game) {
   const appid    = String(game.appid);
@@ -367,6 +426,13 @@ function buildCard(game) {
   reviewEl.dataset.appid = appid;
   renderReviewEl(reviewEl, state.reviews[appid]);
   body.appendChild(reviewEl);
+
+  // HLTB row
+  const hltbEl = document.createElement('div');
+  hltbEl.className = 'card-hltb';
+  hltbEl.dataset.appid = appid;
+  renderHltbEl(hltbEl, state.hltb[appid]);
+  body.appendChild(hltbEl);
 
   // Price row
   const priceEl = document.createElement('div');
@@ -532,7 +598,7 @@ async function submitLoad(steamInput, apiKey, currency) {
 
     Object.assign(state, {
       allGames: games, apiKey, steamId, currency,
-      prices: {}, reviews: {}, page: 1,
+      prices: {}, reviews: {}, hltb: {}, page: 1,
       totalCents: 0, unplayedCents: 0, pricedCount: 0,
     });
 
@@ -549,9 +615,10 @@ async function submitLoad(steamInput, apiKey, currency) {
 
     applyFilterSort();
 
-    // Kick off background loaders — prices for every game, reviews for every game
+    // Kick off background loaders — prices, reviews, and HLTB for every game
     backgroundLoadAll();
     backgroundLoadReviews();
+    backgroundLoadHltb();
 
   } catch (err) {
     clearLoading();
