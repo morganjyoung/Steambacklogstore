@@ -163,10 +163,8 @@
           </select>
         </div>
         <div class="control-group">
-          <label for="genreFilterSelect">Tags & Genres</label>
-          <select id="genreFilterSelect">
-            <option value="any">All Tags</option>
-          </select>
+          <label for="genreFilterInput">Tags & Genres</label>
+          <input type="text" id="genreFilterInput" list="genreList" placeholder="All Tags" class="search-input" style="width: 140px;" autocomplete="off" />
         </div>
         <div class="control-group">
           <label for="sortSelect">Sort By</label>
@@ -250,10 +248,8 @@
         </select>
       </div>
       <div class="control-group">
-        <label for="recGenre">Tag / Genre</label>
-        <select id="recGenre">
-          <option value="any">Any Tag</option>
-        </select>
+        <label for="recGenreInput">Tag / Genre</label>
+        <input type="text" id="recGenreInput" list="genreList" placeholder="Any Tag" class="search-input" style="width: 140px;" autocomplete="off" />
       </div>
       <div class="control-group">
         <label for="recVariance">Variance</label>

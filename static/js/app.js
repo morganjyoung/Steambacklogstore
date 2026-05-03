@@ -44,8 +44,8 @@ const viewModeSelect = document.getElementById('viewModeSelect');
 const searchInput    = document.getElementById('searchInput');
 const showIgnoredCheckbox = document.getElementById('showIgnoredCheckbox');
 const cphCheckbox    = document.getElementById('cphCheckbox');
-const genreFilterSelect = document.getElementById('genreFilterSelect');
-const recGenreSelect = document.getElementById('recGenre');
+const genreFilterInput = document.getElementById('genreFilterInput');
+const recGenreInput = document.getElementById('recGenreInput');
 const backBtn        = document.getElementById('backBtn');
 const surpriseMeBtn  = document.getElementById('surpriseMeBtn');
 const recommendBtn   = document.getElementById('recommendBtn');
@@ -629,25 +629,36 @@ try {
 } catch(_) {}
 
 function renderGenreDropdowns() {
-  const sorted = [...knownGenres].sort();
+  const counts = {};
+  state.allGames.forEach(g => {
+    const details = state.details[g.appid];
+    if (details && details !== 'loading') {
+      const gSet = new Set([...(details.genres || []), ...(details.tags || [])]);
+      gSet.forEach(tag => {
+        counts[tag] = (counts[tag] || 0) + 1;
+      });
+    }
+  });
+
+  const allTags = new Set([...knownGenres, ...Object.keys(counts)]);
+  const sorted = [...allTags].sort((a, b) => a.localeCompare(b));
   try { localStorage.setItem('sbs_known_genres', JSON.stringify(sorted)); } catch(_) {}
   
-  const buildOpts = (selectEl, defaultLabel) => {
-    if (!selectEl) return;
-    const currentVal = selectEl.dataset.savedValue || selectEl.value;
-    selectEl.innerHTML = `<option value="any">${defaultLabel}</option>`;
-    sorted.forEach(g => {
-      const opt = document.createElement('option');
-      opt.value = g;
-      opt.textContent = g;
-      selectEl.appendChild(opt);
-    });
-    if (sorted.includes(currentVal)) selectEl.value = currentVal;
-    delete selectEl.dataset.savedValue; // clear after first use
-  };
+  let genreList = document.getElementById('genreList');
+  if (!genreList) {
+    genreList = document.createElement('datalist');
+    genreList.id = 'genreList';
+    document.body.appendChild(genreList);
+  }
   
-  buildOpts(genreFilterSelect, 'All Tags');
-  buildOpts(recGenreSelect, 'Any Tag');
+  genreList.innerHTML = '';
+  sorted.forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g;
+    const count = counts[g] || 0;
+    if (count > 0) opt.textContent = `${count} games`;
+    genreList.appendChild(opt);
+  });
 }
 
 async function backgroundLoadDetails() {
@@ -677,7 +688,7 @@ async function backgroundLoadDetails() {
         }
       });
       if (changed) renderGenreDropdowns();
-      if (genreFilterSelect?.value !== 'any' || sortSelect?.value === 'release') applyFilterSort(true);
+      if ((genreFilterInput && genreFilterInput.value.trim()) || sortSelect?.value === 'release') applyFilterSort(true);
       else updateResultsCount();
     } catch (_) { batch.forEach(id => { if (state.details[id] === 'loading') state.details[id] = null; }); }
     await delay(300);
@@ -1195,7 +1206,7 @@ function saveControls() {
     viewMode: viewModeSelect?.value,
     showIgnored: showIgnoredCheckbox?.checked,
     cph: cphCheckbox?.checked,
-    genre: genreFilterSelect?.dataset?.savedValue || genreFilterSelect?.value,
+    genre: genreFilterInput?.value || '',
     search: searchInput?.value || ''
   };
   try { localStorage.setItem('sbs_controls', JSON.stringify(controls)); } catch (_) {}
@@ -1207,7 +1218,7 @@ function applyFilterSort(preservePage = false) {
   const filter = filterSelect.value;
   const sort   = sortSelect.value;
   const sortDir= sortDirSelect?.value === 'asc' ? 1 : -1;
-  const genreFilter = genreFilterSelect?.value || 'any';
+  const genreFilter = genreFilterInput ? genreFilterInput.value.trim() : '';
   const showIgnored = showIgnoredCheckbox?.checked;
   const searchTerm = (searchInput?.value || '').toLowerCase().trim();
   let list = [...state.allGames];
@@ -1226,12 +1237,13 @@ function applyFilterSort(preservePage = false) {
   if (filter === 'playing')      list = list.filter(g =>  playing.has(String(g.appid)));
   if (filter === 'not_completed')list = list.filter(g => !completed.has(String(g.appid)));
 
-  if (genreFilter !== 'any') {
+  if (genreFilter && genreFilter.toLowerCase() !== 'any' && genreFilter.toLowerCase() !== 'all tags') {
+    const term = genreFilter.toLowerCase();
     list = list.filter(g => {
       const details = state.details[String(g.appid)];
       if (!details || details === 'loading') return false;
-      const hasGenre = details.genres?.includes(genreFilter);
-      const hasTag = details.tags?.includes(genreFilter);
+      const hasGenre = details.genres?.some(x => x.toLowerCase().includes(term));
+      const hasTag = details.tags?.some(x => x.toLowerCase().includes(term));
       return hasGenre || hasTag;
     });
   }
@@ -1422,7 +1434,9 @@ setupForm.addEventListener('submit', async (e) => {
 filterSelect.addEventListener('change', applyFilterSort);
 sortSelect.addEventListener('change', applyFilterSort);
 if (sortDirSelect) sortDirSelect.addEventListener('change', applyFilterSort);
-if (genreFilterSelect) genreFilterSelect.addEventListener('change', applyFilterSort);
+if (genreFilterInput) {
+  genreFilterInput.addEventListener('input', () => applyFilterSort());
+}
 if (showIgnoredCheckbox) showIgnoredCheckbox.addEventListener('change', applyFilterSort);
 if (viewModeSelect) {
   viewModeSelect.addEventListener('change', () => {
@@ -1462,7 +1476,6 @@ function getRecommendationScore(g) {
   const recLength = document.getElementById('recLength')?.value || 'any';
   const recPop = document.getElementById('recPopularity')?.value || 'any';
   const recEra = document.getElementById('recEra')?.value || 'any';
-  const recGenre = document.getElementById('recGenre')?.value || 'any';
   const recVariance = document.getElementById('recVariance')?.value || 'medium';
 
   // Reviews: always heavily weight positive reviews
@@ -1525,11 +1538,13 @@ function getRecommendationScore(g) {
   else score -= (getPlaytime(g) / 60); // Penalize games already played a lot but not completed
   
   // Priority Genre
-  if (recGenre !== 'any') {
+  const recGenre = recGenreInput ? recGenreInput.value.trim() : '';
+  if (recGenre && recGenre.toLowerCase() !== 'any' && recGenre.toLowerCase() !== 'any tag') {
     const details = state.details[appid];
     if (details && details !== 'loading') {
-      const hasGenre = details.genres?.includes(recGenre);
-      const hasTag = details.tags?.includes(recGenre);
+      const term = recGenre.toLowerCase();
+      const hasGenre = details.genres?.some(x => x.toLowerCase().includes(term));
+      const hasTag = details.tags?.some(x => x.toLowerCase().includes(term));
       if (hasGenre || hasTag) {
         score += 50; // Massive boost for hitting the requested genre
       } else {
@@ -1603,6 +1618,7 @@ if (closeGameDetailsBtn && gameDetailsModal) {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', generateRecommendations);
 });
+if (recGenreInput) recGenreInput.addEventListener('input', generateRecommendations);
 const recRefreshBtn = document.getElementById('recRefreshBtn');
 if (recRefreshBtn) recRefreshBtn.addEventListener('click', generateRecommendations);
 
@@ -1646,7 +1662,7 @@ if (recRefreshBtn) recRefreshBtn.addEventListener('click', generateRecommendatio
     if (controls.viewMode && viewModeSelect) viewModeSelect.value = controls.viewMode;
     if (controls.showIgnored !== undefined && showIgnoredCheckbox) showIgnoredCheckbox.checked = controls.showIgnored;
     if (controls.cph !== undefined && cphCheckbox) cphCheckbox.checked = controls.cph;
-    if (controls.genre && genreFilterSelect) genreFilterSelect.dataset.savedValue = controls.genre;
+    if (controls.genre && genreFilterInput) genreFilterInput.value = controls.genre;
     if (controls.search !== undefined && searchInput) searchInput.value = controls.search;
   } catch (_) {}
 
