@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Steam Backlog Store</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<!-- ─── NAV BAR ─── -->
+<header class="nav-bar">
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <svg class="steam-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.497 1.009 2.455-.397.957-1.494 1.41-2.455 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"/>
+      </svg>
+      <span>BACKLOG STORE</span>
+    </div>
+    <div class="nav-tagline" id="navTagline">Browse · Regret · Repeat</div>
+  </div>
+</header>
+
+<!-- ─── SETUP FORM ─── -->
+<section id="setupSection" class="setup-section">
+  <div class="setup-card">
+    <h1 class="setup-title">Your Steam Backlog Store</h1>
+    <p class="setup-subtitle">
+      Turn your unplayed library into a store front — see every game priced
+      and totalled so you know exactly what you're sitting on.
+    </p>
+
+    <form id="setupForm">
+      <div class="field-group">
+        <label for="steamInput">Steam ID or Custom URL</label>
+        <input
+          type="text"
+          id="steamInput"
+          placeholder="e.g. 76561198XXXXXXXXX or your_username"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <span class="field-hint">
+          Find your Steam64 ID at
+          <a href="https://store.steampowered.com/account" target="_blank" rel="noopener">
+            store.steampowered.com/account
+          </a>
+        </span>
+      </div>
+
+      <div class="field-group">
+        <label for="apiKeyInput">Steam Web API Key</label>
+        <input
+          type="password"
+          id="apiKeyInput"
+          placeholder="Your API key from steamcommunity.com/dev/apikey"
+          value="{{ api_key }}"
+          autocomplete="off"
+        />
+        <span class="field-hint">
+          Free key from
+          <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener">
+            steamcommunity.com/dev/apikey
+          </a>
+          — never sent anywhere except Steam's own servers.
+        </span>
+      </div>
+
+      <div class="field-group">
+        <label for="currencySelect">Currency</label>
+        <select id="currencySelect">
+          <option value="us">USD — United States</option>
+          <option value="gb">GBP — United Kingdom</option>
+          <option value="eu">EUR — Europe</option>
+          <option value="au">AUD — Australia</option>
+          <option value="ca">CAD — Canada</option>
+          <option value="br">BRL — Brazil</option>
+          <option value="ru">RUB — Russia</option>
+          <option value="tr">TRY — Turkey</option>
+          <option value="jp">JPY — Japan</option>
+          <option value="kr">KRW — South Korea</option>
+          <option value="cn">CNY — China</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn-primary" id="loadBtn">
+        Open My Backlog Store
+      </button>
+    </form>
+
+    <div id="setupError" class="error-banner" style="display:none"></div>
+  </div>
+</section>
+
+<!-- ─── STORE SECTION ─── -->
+<section id="storeSection" style="display:none">
+
+  <!-- Value banner -->
+  <div class="value-banner">
+    <div class="value-banner-inner">
+      <div class="banner-stat main-stat">
+        <span class="stat-label">Total Backlog Value</span>
+        <span class="stat-value highlight" id="totalValue">$0.00</span>
+      </div>
+      <div class="banner-divider"></div>
+      <div class="banner-stat">
+        <span class="stat-label">Games</span>
+        <span class="stat-value" id="statGames">—</span>
+      </div>
+      <div class="banner-stat">
+        <span class="stat-label">Unplayed</span>
+        <span class="stat-value" id="statUnplayed">—</span>
+      </div>
+      <div class="banner-stat">
+        <span class="stat-label">Unplayed Value</span>
+        <span class="stat-value highlight-secondary" id="unplayedValue">$0.00</span>
+      </div>
+      <div class="banner-stat">
+        <span class="stat-label">Priced So Far</span>
+        <span class="stat-value" id="statPriced">0 / 0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls bar -->
+  <div class="controls-bar">
+    <div class="controls-inner">
+      <div class="controls-left">
+        <span class="results-count" id="resultsCount"></span>
+      </div>
+      <div class="controls-right">
+        <div class="control-group">
+          <label for="filterSelect">Filter</label>
+          <select id="filterSelect">
+            <option value="all">All Games</option>
+            <option value="unplayed">Unplayed Only</option>
+            <option value="played">Played Only</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="sortSelect">Sort By</label>
+          <select id="sortSelect">
+            <option value="unplayed_first">Unplayed First</option>
+            <option value="price_desc">Highest Price</option>
+            <option value="price_asc">Lowest Price</option>
+            <option value="playtime_desc">Most Played</option>
+            <option value="playtime_asc">Least Played</option>
+            <option value="name_asc">A → Z</option>
+            <option value="name_desc">Z → A</option>
+          </select>
+        </div>
+        <button class="btn-secondary" id="backBtn">← Change Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game grid -->
+  <div class="store-container">
+    <div class="game-grid" id="gameGrid"></div>
+
+    <!-- Pagination -->
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+</section>
+
+<!-- ─── LOADING OVERLAY ─── -->
+<div id="loadingOverlay" class="loading-overlay" style="display:none">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <p id="loadingMsg">Fetching your library…</p>
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
