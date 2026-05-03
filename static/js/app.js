@@ -22,6 +22,7 @@ const state = {
   currency: 'us',
   totalCents: 0,
   unplayedCents: 0,
+  uncompletedCents: 0,
   pricedCount: 0,
 };
 
@@ -41,8 +42,10 @@ const backBtn        = document.getElementById('backBtn');
 
 const elTotalValue    = document.getElementById('totalValue');
 const elUnplayedValue = document.getElementById('unplayedValue');
+const elUncompletedValue = document.getElementById('uncompletedValue');
 const elStatGames     = document.getElementById('statGames');
 const elStatUnplayed  = document.getElementById('statUnplayed');
+const elStatUncompleted = document.getElementById('statUncompleted');
 const elStatPriced    = document.getElementById('statPriced');
 const elResultsCount  = document.getElementById('resultsCount');
 
@@ -104,11 +107,25 @@ function saveCompleted() {
 }
 
 function toggleCompleted(appid) {
-  if (completed.has(appid)) completed.delete(appid); else completed.add(appid);
+  const wasCompleted = completed.has(appid);
+  if (wasCompleted) completed.delete(appid); else completed.add(appid);
   saveCompleted();
   const card = gameGrid.querySelector(`.game-card[data-appid="${appid}"]`);
   if (card) applyCompletedVisual(card, appid);
   // No re-filter — the card updates visually in place; user can change filter manually
+
+  if (state.allGames.length) {
+    const uncompletedCount = state.allGames.filter(g => !completed.has(String(g.appid))).length;
+    if (elStatUncompleted) elStatUncompleted.textContent = uncompletedCount.toLocaleString();
+
+    const priceData = state.prices[appid];
+    if (priceData && priceData !== 'loading' && priceData.final != null) {
+      const prev = state.uncompletedCents;
+      // If we are un-completing it, add the value. If we are completing it, subtract the value.
+      state.uncompletedCents += wasCompleted ? priceData.final : -priceData.final;
+      if (elUncompletedValue) animateValue(elUncompletedValue, prev, state.uncompletedCents);
+    }
+  }
 }
 
 function applyCompletedVisual(card, appid) {
@@ -204,7 +221,7 @@ async function fetchAndApplyPrices(appids) {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
 
-    let totalDelta = 0, unplayedDelta = 0;
+    let totalDelta = 0, unplayedDelta = 0, uncompletedDelta = 0;
     Object.entries(data).forEach(([appid, priceObj]) => {
       state.prices[appid] = priceObj;
       if (priceObj && priceObj.final != null) {
@@ -212,6 +229,7 @@ async function fetchAndApplyPrices(appids) {
         totalDelta += priceObj.final;
         const game = state.allGames.find(g => String(g.appid) === appid);
         if (game && !game.playtime_forever) unplayedDelta += priceObj.final;
+        if (game && !completed.has(String(game.appid))) uncompletedDelta += priceObj.final;
       }
       updateCardPrice(appid, priceObj);
     });
@@ -225,6 +243,11 @@ async function fetchAndApplyPrices(appids) {
       const prev = state.unplayedCents;
       state.unplayedCents += unplayedDelta;
       animateValue(elUnplayedValue, prev, state.unplayedCents);
+    }
+    if (uncompletedDelta > 0) {
+      const prev = state.uncompletedCents;
+      state.uncompletedCents += uncompletedDelta;
+      if (elUncompletedValue) animateValue(elUncompletedValue, prev, state.uncompletedCents);
     }
     elStatPriced.textContent = `${state.pricedCount} / ${state.allGames.length}`;
 
@@ -599,14 +622,17 @@ async function submitLoad(steamInput, apiKey, currency) {
     Object.assign(state, {
       allGames: games, apiKey, steamId, currency,
       prices: {}, reviews: {}, hltb: {}, page: 1,
-      totalCents: 0, unplayedCents: 0, pricedCount: 0,
+      totalCents: 0, unplayedCents: 0, uncompletedCents: 0, pricedCount: 0,
     });
 
     const unplayed = games.filter(g => !g.playtime_forever).length;
+    const uncompleted = games.filter(g => !completed.has(String(g.appid))).length;
     elStatGames.textContent     = games.length.toLocaleString();
     elStatUnplayed.textContent  = unplayed.toLocaleString();
+    if (elStatUncompleted) elStatUncompleted.textContent = uncompleted.toLocaleString();
     elTotalValue.textContent    = formatCents(0);
     elUnplayedValue.textContent = formatCents(0);
+    if (elUncompletedValue) elUncompletedValue.textContent = formatCents(0);
     elStatPriced.textContent    = `0 / ${games.length}`;
 
     setupSection.style.display = 'none';
