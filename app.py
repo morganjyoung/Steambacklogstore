@@ -271,9 +271,9 @@ def get_hltb():
             try:
                 results = HowLongToBeat().search(clean, similarity_case_sensitive=False)
                 if results is None:
-                    app.logger.debug("HLTB: no response for %r", clean)
+                    app.logger.info("HLTB: request failed (None) for %r", clean)
                 elif not results:
-                    app.logger.debug("HLTB: empty results for %r", clean)
+                    app.logger.info("HLTB: no matches for %r", clean)
                 else:
                     best = max(results, key=lambda g: g.similarity)
                     app.logger.info("HLTB: %r → %r (sim=%.2f, main=%s)",
@@ -358,4 +358,5 @@ def get_reviews():
 if __name__ == "__main__":
     import logging
     logging.basicConfig(level=logging.INFO)
+    app.logger.setLevel(logging.INFO)
     app.run(debug=True, port=5000)
