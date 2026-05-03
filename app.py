@@ -1,16 +1,40 @@
 import time
 import os
+import json
 from threading import Lock
 from flask import Flask, render_template, jsonify, request
 import requests
 
 app = Flask(__name__)
 
-_price_cache: dict = {}
+_price_cache = {}
 _cache_lock = Lock()
-CACHE_TTL = 3600
+CACHE_TTL = 86400  # 24 hours
 
 STEAM_API_KEY = os.environ.get("STEAM_API_KEY", "")
+
+CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_cache.json")
+
+
+def _load_cache():
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            _price_cache.update(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+
+def _save_cache():
+    try:
+        with _cache_lock:
+            snapshot = dict(_price_cache)
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f)
+    except OSError:
+        pass
+
+
+_load_cache()
 
 
 def _cached_price(appid: str):
@@ -145,6 +169,9 @@ def get_prices():
 
         if i + batch_size < len(to_fetch):
             time.sleep(0.3)
+
+    if to_fetch:
+        _save_cache()
 
     return jsonify(result)
 

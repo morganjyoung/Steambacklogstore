@@ -56,10 +56,20 @@ function clearError() {
   setupError.style.display = 'none';
 }
 
+const CC_TO_CURRENCY = {
+  us:'USD', gb:'GBP', eu:'EUR', au:'AUD', ca:'CAD',
+  br:'BRL', ru:'RUB', tr:'TRY', jp:'JPY', kr:'KRW', cn:'CNY',
+};
+
+function currencyCode() {
+  return CC_TO_CURRENCY[state.currency] || 'USD';
+}
+
 function formatCents(cents) {
   if (cents == null) return null;
-  const div = cents / 100;
-  return div.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+  return (cents / 100).toLocaleString('en-US', {
+    style: 'currency', currency: currencyCode(), maximumFractionDigits: 2,
+  });
 }
 
 function formatPrice(priceObj) {
@@ -91,7 +101,7 @@ function animateValue(el, fromCents, toCents) {
     const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
     const current = fromCents + (toCents - fromCents) * ease;
     el.textContent = (current / 100).toLocaleString('en-US', {
-      style: 'currency', currency: 'USD', minimumFractionDigits: 2,
+      style: 'currency', currency: currencyCode(), minimumFractionDigits: 2,
     });
     if (t < 1) requestAnimationFrame(step);
   }
@@ -433,24 +443,35 @@ async function loadLibrary(steamId, apiKey, currency) {
   return { games: libJson.games, steamId: resolvedId };
 }
 
-// ── Event: form submit ────────────────────────────
-setupForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
+// ── localStorage helpers ──────────────────────────
+const LS_KEY = 'sbs_profile';
+
+function saveProfile(steamInput, apiKey, currency) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({ steamInput, apiKey, currency }));
+  } catch (_) {}
+}
+
+function loadProfile() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+  } catch (_) { return null; }
+}
+
+function clearProfile() {
+  try { localStorage.removeItem(LS_KEY); } catch (_) {}
+}
+
+// ── Shared submit logic ───────────────────────────
+async function submitLoad(steamInput, apiKey, currency) {
   clearError();
-
-  const steamInput = document.getElementById('steamInput').value.trim();
-  const apiKey     = document.getElementById('apiKeyInput').value.trim();
-  const currency   = document.getElementById('currencySelect').value;
-
-  if (!steamInput) return showError('Please enter your Steam ID or username.');
-  if (!apiKey)     return showError('Please enter your Steam Web API key.');
-
   loadBtn.disabled = true;
 
   try {
     const { games, steamId } = await loadLibrary(steamInput, apiKey, currency);
 
-    // Persist state
+    saveProfile(steamInput, apiKey, currency);
+
     state.allGames     = games;
     state.apiKey       = apiKey;
     state.steamId      = steamId;
@@ -461,7 +482,6 @@ setupForm.addEventListener('submit', async (e) => {
     state.unplayedCents= 0;
     state.pricedCount  = 0;
 
-    // Update banner stats
     const unplayed = games.filter(g => !g.playtime_forever).length;
     elStatGames.textContent    = games.length.toLocaleString();
     elStatUnplayed.textContent = unplayed.toLocaleString();
@@ -469,7 +489,6 @@ setupForm.addEventListener('submit', async (e) => {
     elUnplayedValue.textContent= '$0.00';
     elStatPriced.textContent   = `0 / ${games.length}`;
 
-    // Show store
     setupSection.style.display = 'none';
     storeSection.style.display = 'block';
     clearLoading();
@@ -482,6 +501,19 @@ setupForm.addEventListener('submit', async (e) => {
   } finally {
     loadBtn.disabled = false;
   }
+}
+
+// ── Event: form submit ────────────────────────────
+setupForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const steamInput = document.getElementById('steamInput').value.trim();
+  const apiKey     = document.getElementById('apiKeyInput').value.trim();
+  const currency   = document.getElementById('currencySelect').value;
+
+  if (!steamInput) return showError('Please enter your Steam ID or username.');
+  if (!apiKey)     return showError('Please enter your Steam Web API key.');
+
+  await submitLoad(steamInput, apiKey, currency);
 });
 
 // ── Event: filter / sort change ───────────────────
@@ -493,3 +525,17 @@ backBtn.addEventListener('click', () => {
   storeSection.style.display = 'none';
   setupSection.style.display = 'flex';
 });
+
+// ── Auto-load from localStorage on page load ──────
+(function init() {
+  const saved = loadProfile();
+  if (!saved) return;
+
+  document.getElementById('steamInput').value    = saved.steamInput || '';
+  document.getElementById('apiKeyInput').value   = saved.apiKey    || '';
+  document.getElementById('currencySelect').value= saved.currency  || 'us';
+
+  if (saved.steamInput && saved.apiKey) {
+    submitLoad(saved.steamInput, saved.apiKey, saved.currency || 'us');
+  }
+})();
