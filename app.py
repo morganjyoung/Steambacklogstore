@@ -11,9 +11,13 @@ _price_cache = {}
 _cache_lock = Lock()
 CACHE_TTL = 86400  # 24 hours
 
+_review_cache = {}
+_review_lock = Lock()
+
 STEAM_API_KEY = os.environ.get("STEAM_API_KEY", "")
 
-CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_cache.json")
+CACHE_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_cache.json")
+REVIEW_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "review_cache.json")
 
 
 def _load_cache():
@@ -34,7 +38,26 @@ def _save_cache():
         pass
 
 
+def _load_review_cache():
+    try:
+        with open(REVIEW_FILE, "r", encoding="utf-8") as f:
+            _review_cache.update(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+
+def _save_review_cache():
+    try:
+        with _review_lock:
+            snapshot = dict(_review_cache)
+        with open(REVIEW_FILE, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f)
+    except OSError:
+        pass
+
+
 _load_cache()
+_load_review_cache()
 
 
 def _cached_price(appid: str):
@@ -172,6 +195,58 @@ def get_prices():
 
     if to_fetch:
         _save_cache()
+
+    return jsonify(result)
+
+
+@app.route("/api/reviews")
+def get_reviews():
+    appids_raw = request.args.get("appids", "")
+    if not appids_raw:
+        return jsonify({}), 400
+
+    appids = [a.strip() for a in appids_raw.split(",") if a.strip()]
+    result = {}
+    to_fetch = []
+
+    for appid in appids:
+        with _review_lock:
+            entry = _review_cache.get(appid)
+        if entry and time.time() - entry["ts"] < CACHE_TTL:
+            result[appid] = entry["data"]
+        else:
+            to_fetch.append(appid)
+
+    for appid in to_fetch:
+        try:
+            resp = requests.get(
+                f"https://store.steampowered.com/appreviews/{appid}",
+                params={"json": 1, "num_per_page": 0, "language": "all"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            summary = body.get("query_summary", {}) if body.get("success") == 1 else {}
+            total    = summary.get("total_reviews", 0)
+            positive = summary.get("total_positive", 0)
+            data = {
+                "score": summary.get("review_score", 0),
+                "desc":  summary.get("review_score_desc", ""),
+                "positive": positive,
+                "total":    total,
+                "pct": round(positive / total * 100) if total else 0,
+            } if total else None
+        except requests.RequestException:
+            data = None
+
+        result[appid] = data
+        with _review_lock:
+            _review_cache[appid] = {"data": data, "ts": time.time()}
+
+        time.sleep(0.15)
+
+    if to_fetch:
+        _save_review_cache()
 
     return jsonify(result)
 

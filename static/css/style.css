@@ -457,6 +457,22 @@ a:hover { text-decoration: underline; }
   color: var(--text-dim);
 }
 
+/* ── Review score ── */
+.card-review {
+  min-height: 16px;
+}
+.review-label {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.review-positive { color: #66c0f4; }
+.review-mixed    { color: #a0a0a0; }
+.review-negative { color: #cf6679; }
+.review-none     { color: var(--text-dim); font-size: 11px; }
+
 /* ── Pagination ── */
 .pagination {
   display: flex;
