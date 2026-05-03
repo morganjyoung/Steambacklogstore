@@ -416,6 +416,15 @@ function applyFilterSort() {
     const r = state.reviews[String(g.appid)];
     return (r && r !== 'loading' && r !== null) ? r.pct : -1;
   };
+  const reviewCountOf = g => {
+    const r = state.reviews[String(g.appid)];
+    return (r && r !== 'loading' && r !== null) ? (r.total || 0) : -1;
+  };
+  // positive-review count = total × (pct/100); rewards popular AND well-rated games
+  const popularityOf = g => {
+    const r = state.reviews[String(g.appid)];
+    return (r && r !== 'loading' && r !== null && r.total) ? r.total * r.pct / 100 : -1;
+  };
 
   switch (sort) {
     case 'unplayed_first':
@@ -423,9 +432,11 @@ function applyFilterSort() {
         const ap = a.playtime_forever > 0 ? 1 : 0, bp = b.playtime_forever > 0 ? 1 : 0;
         return ap !== bp ? ap - bp : priceOf(b) - priceOf(a);
       }); break;
-    case 'price_desc':   list.sort((a, b) => priceOf(b)  - priceOf(a));  break;
-    case 'price_asc':    list.sort((a, b) => priceOf(a)  - priceOf(b));  break;
-    case 'review_desc':  list.sort((a, b) => reviewOf(b) - reviewOf(a)); break;
+    case 'price_desc':    list.sort((a, b) => priceOf(b)      - priceOf(a));      break;
+    case 'price_asc':     list.sort((a, b) => priceOf(a)      - priceOf(b));      break;
+    case 'review_desc':   list.sort((a, b) => reviewOf(b)     - reviewOf(a));     break;
+    case 'most_reviews':  list.sort((a, b) => reviewCountOf(b)- reviewCountOf(a)); break;
+    case 'popular':       list.sort((a, b) => popularityOf(b) - popularityOf(a)); break;
     case 'playtime_desc': list.sort((a, b) => (b.playtime_forever||0) - (a.playtime_forever||0)); break;
     case 'playtime_asc':  list.sort((a, b) => (a.playtime_forever||0) - (b.playtime_forever||0)); break;
     case 'name_asc':  list.sort((a, b) => (a.name||'').localeCompare(b.name||'')); break;
