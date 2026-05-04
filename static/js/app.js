@@ -45,8 +45,11 @@ const searchInput    = document.getElementById('searchInput');
 const showIgnoredCheckbox = document.getElementById('showIgnoredCheckbox');
 const cphCheckbox    = document.getElementById('cphCheckbox');
 const genreFilterInput = document.getElementById('genreFilterInput');
+const tagFilterInput = document.getElementById('tagFilterInput');
 const recGenreInput = document.getElementById('recGenreInput');
+const recTagInput = document.getElementById('recTagInput');
 const backBtn        = document.getElementById('backBtn');
+const exportCsvBtn   = document.getElementById('exportCsvBtn');
 const surpriseMeBtn  = document.getElementById('surpriseMeBtn');
 const recommendBtn   = document.getElementById('recommendBtn');
 const recommendModal = document.getElementById('recommendModal');
@@ -577,6 +580,31 @@ function updateCardHltb(appid, hltbData) {
   els.forEach(el => renderHltbEl(el, hltbData));
 }
 
+function renderTagsEl(el, detailsData) {
+  el.innerHTML = '';
+  if (!detailsData || detailsData === 'loading') return;
+  const tags = detailsData.tags || [];
+  if (!tags.length) {
+    const s = document.createElement('span');
+    s.className = 'tags-none';
+    s.textContent = 'No tags';
+    el.appendChild(s);
+    return;
+  }
+  const topTags = tags.slice(0, 3);
+  topTags.forEach(t => {
+    const badge = document.createElement('span');
+    badge.className = 'tag-badge';
+    badge.textContent = t;
+    el.appendChild(badge);
+  });
+}
+
+function updateCardTags(appid, detailsData) {
+  const els = document.querySelectorAll(`.card-tags[data-appid="${appid}"]`);
+  els.forEach(el => renderTagsEl(el, detailsData));
+}
+
 function updateUncompletedHoursDisplay() {
   if (!elUncompletedTime) return;
   let total = 0;
@@ -628,21 +656,26 @@ try {
   knownGenres = new Set(savedGenres);
 } catch(_) {}
 
+let knownTags = new Set();
+try {
+  const savedTags = JSON.parse(localStorage.getItem('sbs_known_tags') || '[]');
+  knownTags = new Set(savedTags);
+} catch(_) {}
+
 function renderGenreDropdowns() {
-  const counts = {};
+  const genreCounts = {};
+  const tagCounts = {};
   state.allGames.forEach(g => {
     const details = state.details[g.appid];
     if (details && details !== 'loading') {
-      const gSet = new Set([...(details.genres || []), ...(details.tags || [])]);
-      gSet.forEach(tag => {
-        counts[tag] = (counts[tag] || 0) + 1;
-      });
+      if (details.genres) details.genres.forEach(g => { genreCounts[g] = (genreCounts[g] || 0) + 1; });
+      if (details.tags) details.tags.forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; });
     }
   });
 
-  const allTags = new Set([...knownGenres, ...Object.keys(counts)]);
-  const sorted = [...allTags].sort((a, b) => a.localeCompare(b));
-  try { localStorage.setItem('sbs_known_genres', JSON.stringify(sorted)); } catch(_) {}
+  const sortedGenres = Object.keys(genreCounts).sort((a, b) => a.localeCompare(b));
+
+  const sortedTags = Object.keys(tagCounts).sort((a, b) => a.localeCompare(b));
   
   let genreList = document.getElementById('genreList');
   if (!genreList) {
@@ -652,12 +685,28 @@ function renderGenreDropdowns() {
   }
   
   genreList.innerHTML = '';
-  sorted.forEach(g => {
+  sortedGenres.forEach(g => {
     const opt = document.createElement('option');
     opt.value = g;
-    const count = counts[g] || 0;
+    const count = genreCounts[g] || 0;
     if (count > 0) opt.textContent = `${count} games`;
     genreList.appendChild(opt);
+  });
+
+  let tagList = document.getElementById('tagList');
+  if (!tagList) {
+    tagList = document.createElement('datalist');
+    tagList.id = 'tagList';
+    document.body.appendChild(tagList);
+  }
+  
+  tagList.innerHTML = '';
+  sortedTags.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t;
+    const count = tagCounts[t] || 0;
+    if (count > 0) opt.textContent = `${count} games`;
+    tagList.appendChild(opt);
   });
 }
 
@@ -679,16 +728,14 @@ async function backgroundLoadDetails() {
       batch.forEach(id => {
         if (data[id] !== undefined) {
           state.details[id] = data[id];
-          const genres = data[id]?.genres || [];
-          if (genres.length) genres.forEach(g => { if (!knownGenres.has(g)) { knownGenres.add(g); changed = true; } });
-          const tags = data[id]?.tags || [];
-          if (tags.length) tags.forEach(t => { if (!knownGenres.has(t)) { knownGenres.add(t); changed = true; } });
+          changed = true;
+          updateCardTags(id, data[id]);
         } else {
           state.details[id] = null; // Mark as failed so we don't hang the progress bar
         }
       });
       if (changed) renderGenreDropdowns();
-      if ((genreFilterInput && genreFilterInput.value.trim()) || sortSelect?.value === 'release') applyFilterSort(true);
+      if ((genreFilterInput && genreFilterInput.value.trim()) || (tagFilterInput && tagFilterInput.value.trim()) || sortSelect?.value === 'release') applyFilterSort(true);
       else updateResultsCount();
     } catch (_) { batch.forEach(id => { if (state.details[id] === 'loading') state.details[id] = null; }); }
     await delay(300);
@@ -933,6 +980,13 @@ function buildCard(game) {
   renderHltbEl(hltbEl, state.hltb[appid]);
   body.appendChild(hltbEl);
 
+  // Tags row
+  const tagsEl = document.createElement('div');
+  tagsEl.className = 'card-tags';
+  tagsEl.dataset.appid = appid;
+  renderTagsEl(tagsEl, state.details[appid]);
+  body.appendChild(tagsEl);
+
   // Price row
   const priceEl = document.createElement('div');
   priceEl.className = 'card-price';
@@ -1058,6 +1112,13 @@ function buildTableRow(game) {
   renderHltbEl(tdHltb, state.hltb[appid]);
   tr.appendChild(tdHltb);
 
+  // Tags
+  const tdTags = document.createElement('td');
+  tdTags.className = 'card-tags';
+  tdTags.dataset.appid = appid;
+  renderTagsEl(tdTags, state.details[appid]);
+  tr.appendChild(tdTags);
+
   // Actions
   const tdActions = document.createElement('td');
   const actionsWrap = document.createElement('div');
@@ -1117,6 +1178,7 @@ function renderGrid() {
         <th>Price</th>
         <th>Steam Score</th>
         <th>Time to Beat</th>
+        <th>Top Tags</th>
         <th style="width: 110px;">Actions</th>
       </tr>
     `;
@@ -1207,6 +1269,7 @@ function saveControls() {
     showIgnored: showIgnoredCheckbox?.checked,
     cph: cphCheckbox?.checked,
     genre: genreFilterInput?.value || '',
+    tag: tagFilterInput?.value || '',
     search: searchInput?.value || ''
   };
   try { localStorage.setItem('sbs_controls', JSON.stringify(controls)); } catch (_) {}
@@ -1219,6 +1282,7 @@ function applyFilterSort(preservePage = false) {
   const sort   = sortSelect.value;
   const sortDir= sortDirSelect?.value === 'asc' ? 1 : -1;
   const genreFilter = genreFilterInput ? genreFilterInput.value.trim() : '';
+  const tagFilter = tagFilterInput ? tagFilterInput.value.trim() : '';
   const showIgnored = showIgnoredCheckbox?.checked;
   const searchTerm = (searchInput?.value || '').toLowerCase().trim();
   let list = [...state.allGames];
@@ -1228,7 +1292,11 @@ function applyFilterSort(preservePage = false) {
   }
 
   if (searchTerm) {
-    list = list.filter(g => (g.name || '').toLowerCase().includes(searchTerm));
+    const terms = searchTerm.split(/\s+/).filter(t => t);
+    list = list.filter(g => {
+      const name = (g.name || '').toLowerCase();
+      return terms.every(t => name.includes(t));
+    });
   }
 
   if (filter === 'unplayed')     list = list.filter(g => getPlaytime(g) <= 0);
@@ -1237,14 +1305,21 @@ function applyFilterSort(preservePage = false) {
   if (filter === 'playing')      list = list.filter(g =>  playing.has(String(g.appid)));
   if (filter === 'not_completed')list = list.filter(g => !completed.has(String(g.appid)));
 
-  if (genreFilter && genreFilter.toLowerCase() !== 'any' && genreFilter.toLowerCase() !== 'all tags') {
-    const term = genreFilter.toLowerCase();
+  if (genreFilter && genreFilter.toLowerCase() !== 'any' && genreFilter.toLowerCase() !== 'all genres') {
+    const terms = genreFilter.toLowerCase().split(',').map(t => t.trim()).filter(t => t);
     list = list.filter(g => {
       const details = state.details[String(g.appid)];
       if (!details || details === 'loading') return false;
-      const hasGenre = details.genres?.some(x => x.toLowerCase().includes(term));
-      const hasTag = details.tags?.some(x => x.toLowerCase().includes(term));
-      return hasGenre || hasTag;
+      return terms.every(term => details.genres?.some(x => x.toLowerCase().includes(term)));
+    });
+  }
+
+  if (tagFilter && tagFilter.toLowerCase() !== 'any' && tagFilter.toLowerCase() !== 'all tags') {
+    const terms = tagFilter.toLowerCase().split(',').map(t => t.trim()).filter(t => t);
+    list = list.filter(g => {
+      const details = state.details[String(g.appid)];
+      if (!details || details === 'loading') return false;
+      return terms.every(term => details.tags?.some(x => x.toLowerCase().includes(term)));
     });
   }
 
@@ -1384,8 +1459,6 @@ async function submitLoad(steamInput, apiKey, currency) {
         Object.entries(cached.details || {}).forEach(([id, detailObj]) => { 
           if (libraryIds.has(id)) {
             state.details[id] = detailObj;
-            if (detailObj?.genres?.length) detailObj.genres.forEach(g => knownGenres.add(g));
-            if (detailObj?.tags?.length) detailObj.tags.forEach(t => knownGenres.add(t));
           }
         });
       }
@@ -1436,6 +1509,9 @@ sortSelect.addEventListener('change', applyFilterSort);
 if (sortDirSelect) sortDirSelect.addEventListener('change', applyFilterSort);
 if (genreFilterInput) {
   genreFilterInput.addEventListener('input', () => applyFilterSort());
+}
+if (tagFilterInput) {
+  tagFilterInput.addEventListener('input', () => applyFilterSort());
 }
 if (showIgnoredCheckbox) showIgnoredCheckbox.addEventListener('change', applyFilterSort);
 if (viewModeSelect) {
@@ -1539,13 +1615,29 @@ function getRecommendationScore(g) {
   
   // Priority Genre
   const recGenre = recGenreInput ? recGenreInput.value.trim() : '';
-  if (recGenre && recGenre.toLowerCase() !== 'any' && recGenre.toLowerCase() !== 'any tag') {
+  if (recGenre && recGenre.toLowerCase() !== 'any' && recGenre.toLowerCase() !== 'any genre') {
     const details = state.details[appid];
     if (details && details !== 'loading') {
-      const term = recGenre.toLowerCase();
-      const hasGenre = details.genres?.some(x => x.toLowerCase().includes(term));
-      const hasTag = details.tags?.some(x => x.toLowerCase().includes(term));
-      if (hasGenre || hasTag) {
+      const terms = recGenre.toLowerCase().split(',').map(t => t.trim()).filter(t => t);
+      const matched = terms.every(term => details.genres?.some(x => x.toLowerCase().includes(term)));
+      if (matched) {
+        score += 50; // Massive boost for hitting the requested genre
+      } else {
+        score -= 50; // Huge penalty if it misses the target genre entirely
+      }
+    } else {
+      score -= 50;
+    }
+  }
+
+  // Priority Tag
+  const recTag = recTagInput ? recTagInput.value.trim() : '';
+  if (recTag && recTag.toLowerCase() !== 'any' && recTag.toLowerCase() !== 'any tag') {
+    const details = state.details[appid];
+    if (details && details !== 'loading') {
+      const terms = recTag.toLowerCase().split(',').map(t => t.trim()).filter(t => t);
+      const matched = terms.every(term => details.tags?.some(x => x.toLowerCase().includes(term)));
+      if (matched) {
         score += 50; // Massive boost for hitting the requested genre
       } else {
         score -= 50; // Huge penalty if it misses the target genre entirely
@@ -1619,8 +1711,54 @@ if (closeGameDetailsBtn && gameDetailsModal) {
   if (el) el.addEventListener('change', generateRecommendations);
 });
 if (recGenreInput) recGenreInput.addEventListener('input', generateRecommendations);
+if (recTagInput) recTagInput.addEventListener('input', generateRecommendations);
 const recRefreshBtn = document.getElementById('recRefreshBtn');
 if (recRefreshBtn) recRefreshBtn.addEventListener('click', generateRecommendations);
+
+if (exportCsvBtn) {
+  exportCsvBtn.addEventListener('click', () => {
+    if (!state.filtered || state.filtered.length === 0) {
+      alert('No games to export!');
+      return;
+    }
+
+    const headers = ['AppID', 'Name', 'Playtime (hours)', 'Price', 'Steam Score (%)', 'Time to Beat (Main)', 'Release Date', 'Status'];
+    const rows = state.filtered.map(g => {
+      const appid = String(g.appid);
+      const name = `"${(g.name || '').replace(/"/g, '""')}"`;
+      const pt = (getPlaytime(g) / 60).toFixed(1);
+      const p = state.prices[appid];
+      const price = p && p.final != null ? (p.final / 100).toFixed(2) : '';
+      const r = state.reviews[appid];
+      const score = r && r.pct != null ? r.pct : '';
+      const h = state.hltb[appid];
+      const hltb = h && h.main != null ? h.main : '';
+      const d = state.details[appid];
+      const rel = d && d.release_date ? `"${d.release_date}"` : '';
+      
+      let status = 'Unplayed';
+      if (ignored.has(appid)) status = 'Ignored';
+      else if (completed.has(appid)) status = 'Completed';
+      else if (playing.has(appid)) status = 'Playing';
+      else if (getPlaytime(g) > 0) status = 'Played';
+
+      return [appid, name, pt, price, score, hltb, rel, status].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'steam_backlog.csv';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+}
 
 // ── Auto-load from localStorage ───────────────────
 (function init() {
@@ -1663,6 +1801,7 @@ if (recRefreshBtn) recRefreshBtn.addEventListener('click', generateRecommendatio
     if (controls.showIgnored !== undefined && showIgnoredCheckbox) showIgnoredCheckbox.checked = controls.showIgnored;
     if (controls.cph !== undefined && cphCheckbox) cphCheckbox.checked = controls.cph;
     if (controls.genre && genreFilterInput) genreFilterInput.value = controls.genre;
+    if (controls.tag && tagFilterInput) tagFilterInput.value = controls.tag;
     if (controls.search !== undefined && searchInput) searchInput.value = controls.search;
   } catch (_) {}
 

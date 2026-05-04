@@ -1,4 +1,4 @@
-le ones rather than whole library. Fix it/* ── Reset & base ── */
+/* ── Reset & base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -625,6 +625,26 @@ a:hover { text-decoration: underline; }
   text-overflow: ellipsis;
   display: block;
   cursor: help;
+}
+
+/* ── Tags ── */
+.card-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-height: 18px;
+}
+.tag-badge {
+  background: var(--border);
+  color: var(--text-primary);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.tags-none {
+  color: var(--text-dim);
+  font-size: 11px;
 }
 
 /* ── Pagination ── */

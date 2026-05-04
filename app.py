@@ -432,6 +432,7 @@ def _fetch_app_details(appid, cc):
         spy_resp = requests.get(
             "https://steamspy.com/api.php",
             params={"request": "appdetails", "appid": appid},
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
             timeout=5,
         )
         if spy_resp.ok:

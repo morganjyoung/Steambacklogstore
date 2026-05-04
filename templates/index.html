@@ -163,8 +163,12 @@
           </select>
         </div>
         <div class="control-group">
-          <label for="genreFilterInput">Tags & Genres</label>
-          <input type="text" id="genreFilterInput" list="genreList" placeholder="All Tags" class="search-input" style="width: 140px;" autocomplete="off" />
+          <label for="genreFilterInput">Genres</label>
+          <input type="text" id="genreFilterInput" list="genreList" placeholder="All Genres" class="search-input" style="width: 120px;" autocomplete="off" />
+        </div>
+        <div class="control-group">
+          <label for="tagFilterInput">Tags</label>
+          <input type="text" id="tagFilterInput" list="tagList" placeholder="All Tags" class="search-input" style="width: 120px;" autocomplete="off" />
         </div>
         <div class="control-group">
           <label for="sortSelect">Sort By</label>
@@ -197,6 +201,7 @@
           <input type="checkbox" id="showIgnoredCheckbox" style="cursor: pointer; width: 14px; height: 14px;" />
           <label for="showIgnoredCheckbox" style="cursor: pointer;">Show Ignored</label>
         </div>
+        <button class="btn-secondary" id="exportCsvBtn" style="margin-right: 8px;">📥 Export CSV</button>
         <button class="btn-secondary" id="surpriseMeBtn" style="background: linear-gradient(to right, #e65c00, #F9D423); color: white; border-color: #e65c00; margin-right: 8px;">🚀 Surprise Me!</button>
         <button class="btn-secondary" id="recommendBtn" style="background: linear-gradient(to right, #8f47ba, #6b2b91); color: white; border-color: #a35ad6;">🎲 What to Play?</button>
         <button class="btn-secondary" id="backBtn">← Change Profile</button>
@@ -248,8 +253,12 @@
         </select>
       </div>
       <div class="control-group">
-        <label for="recGenreInput">Tag / Genre</label>
-        <input type="text" id="recGenreInput" list="genreList" placeholder="Any Tag" class="search-input" style="width: 140px;" autocomplete="off" />
+        <label for="recGenreInput">Genre</label>
+        <input type="text" id="recGenreInput" list="genreList" placeholder="Any Genre" class="search-input" style="width: 120px;" autocomplete="off" />
+      </div>
+      <div class="control-group">
+        <label for="recTagInput">Tag</label>
+        <input type="text" id="recTagInput" list="tagList" placeholder="Any Tag" class="search-input" style="width: 120px;" autocomplete="off" />
       </div>
       <div class="control-group">
         <label for="recVariance">Variance</label>
