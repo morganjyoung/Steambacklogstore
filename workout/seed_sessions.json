@@ -1,0 +1,33 @@
+[
+ {"date": "2026-09-18", "day": "A", "note": "Imported from the plan's log (top sets)", "exercises": [
+  {"key": "squat", "name": "Squat", "sets": [{"r": 6, "w": 70}, {"r": 6, "w": 70}, {"r": 6, "w": 70}]},
+  {"key": "dbBench", "name": "Dumbbell bench", "sets": [{"r": 7, "w": 20}, {"r": 7, "w": 20}, {"r": 7, "w": 20}]},
+  {"key": "pulldown", "name": "Lat pulldown", "sets": [{"r": 8, "w": 50}, {"r": 8, "w": 50}, {"r": 8, "w": 50}]},
+  {"key": "pushdown", "name": "Triceps pushdown", "sets": [{"r": 8, "w": 25}, {"r": 8, "w": 25}, {"r": 8, "w": 25}, {"r": 8, "w": 25}]},
+  {"key": "fly", "name": "Dumbbell fly", "sets": [{"r": 8, "w": 10}]}
+ ]},
+ {"date": "2026-09-20", "day": "B", "note": "Imported from the plan's log (top sets)", "exercises": [
+  {"key": "dbBench", "name": "Dumbbell bench", "sets": [{"r": 6, "w": 22.5}, {"r": 6, "w": 22.5}, {"r": 6, "w": 22.5}, {"r": 6, "w": 22.5}]},
+  {"key": "shoulderPress", "name": "Dumbbell shoulder press", "sets": [{"r": 8, "w": 12.5}, {"r": 8, "w": 12.5}, {"r": 8, "w": 12.5}, {"r": 8, "w": 12.5}]},
+  {"key": "row", "name": "Seated cable row", "sets": [{"r": 10, "w": 50}, {"r": 10, "w": 50}, {"r": 10, "w": 50}]},
+  {"key": "dbCurl", "name": "Dumbbell curl", "sets": [{"r": 12, "w": 12.5}, {"r": 8, "w": 15}]},
+  {"key": "pushdown", "name": "Triceps pushdown", "sets": [{"r": 9, "w": 25}]},
+  {"key": "latRaise", "name": "Lateral raise", "sets": [{"r": 14, "w": 4}]}
+ ]},
+ {"date": "2026-09-22", "day": "C", "note": "Imported from the plan's log (top sets)", "exercises": [
+  {"key": "squat", "name": "Squat", "sets": [{"r": 5, "w": 70}, {"r": 5, "w": 70}, {"r": 5, "w": 70}, {"r": 6, "w": 70}]},
+  {"key": "pulldown", "name": "Lat pulldown", "sets": [{"r": 8, "w": 55}, {"r": 8, "w": 55}, {"r": 8, "w": 55}, {"r": 8, "w": 55}]},
+  {"key": "incline", "name": "Incline bench (barbell)", "sets": [{"r": 8, "w": 45}, {"r": 8, "w": 45}, {"r": 4, "w": 45}]},
+  {"key": "facePull", "name": "Face pull", "sets": [{"r": 15, "w": 15}]},
+  {"key": "hammer", "name": "Hammer curl", "sets": [{"r": 8, "w": 12.5}]},
+  {"key": "pushdown", "name": "Triceps pushdown", "sets": [{"r": 8, "w": 30}, {"r": 7, "w": 30}]}
+ ]},
+ {"date": "2026-09-25", "day": "A", "note": "Imported from the plan's log (top sets)", "exercises": [
+  {"key": "pulldown", "name": "Lat pulldown", "sets": [{"r": 10, "w": 55}, {"r": 10, "w": 55}, {"r": 10, "w": 55}]},
+  {"key": "dbBench", "name": "Dumbbell bench", "sets": [{"r": 8, "w": 22.5}, {"r": 8, "w": 22.5}, {"r": 6, "w": 22.5}]},
+  {"key": "squat", "name": "Squat", "sets": [{"r": 5, "w": 72.5}, {"r": 5, "w": 72.5}, {"r": 5, "w": 72.5}, {"r": 6, "w": 72.5}]},
+  {"key": "latRaise", "name": "Lateral raise", "sets": [{"r": 12, "w": 5}, {"r": 12, "w": 5}, {"r": 14, "w": 5}]},
+  {"key": "inclineCurl", "name": "Seated incline curl", "sets": [{"r": 12, "w": 7.5, "warm": true}, {"r": 12, "w": 10}, {"r": 12, "w": 10}]},
+  {"key": "pushdown", "name": "Triceps pushdown", "sets": [{"r": 12, "w": 25}, {"r": 12, "w": 25}, {"r": 10, "w": 25}]}
+ ]}
+]

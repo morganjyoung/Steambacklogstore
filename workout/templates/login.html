@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in · Gym log</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F2F3F1;--panel:#FFFFFF;--ink:#1C2124;--muted:#5E676C;--rule:#D8DCDA;--red:#D2413A;--on-ink:#FFFFFF}
+@media (prefers-color-scheme: dark){:root{--bg:#14171A;--panel:#1C2125;--ink:#E8ECEA;--muted:#9AA4A9;--rule:#2B3136;--red:#E2615B;--on-ink:#14171A;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:17px/1.45 "Barlow",system-ui,sans-serif;padding:16px}
+form{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--rule);border-radius:14px;padding:22px}
+h1{font:600 30px/1.1 "Barlow Condensed","Arial Narrow",sans-serif;margin:0 0 4px}
+p{margin:0 0 16px;color:var(--muted);font-size:15px}
+label{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
+input{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--rule);border-radius:10px;background:var(--bg);color:var(--ink)}
+button{margin-top:14px;width:100%;border:0;border-radius:12px;background:var(--ink);color:var(--on-ink);padding:12px;font:600 20px "Barlow Condensed","Arial Narrow",sans-serif;cursor:pointer}
+.err{color:var(--red);margin:10px 0 0;font-size:15px}
+</style>
+</head>
+<body>
+<form method="post">
+  <h1>Gym log</h1>
+  <p>Sign in once on this phone and it stays signed in for 90 days.</p>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
+  {% if error %}<p class="err">{{ error }}</p>{% endif %}
+  <button type="submit">Sign in</button>
+</form>
+</body>
+</html>
